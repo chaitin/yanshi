@@ -1,0 +1,4 @@
+*.o
+/src/parser.cc
+/src/parser.hh
+/src/lex.yy.cc
