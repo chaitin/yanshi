@@ -1,11 +1,13 @@
 %{
+#include "parser.hh"
+#include "syntax.hh"
+#include "lexer_helper.hh"
+
+#include <climits>
 #include <cstdlib>
 #include <cstring>
 #include <string>
 using namespace std;
-
-#include "parser.hh"
-#include "syntax.hh"
 
 #define YY_USER_ACTION                      \
   do {                                      \
@@ -15,6 +17,16 @@ using namespace std;
   } while (0);
 
 static string tmp_str;
+
+static void unexpected_eof(YYSTYPE* yylval, const char* token_end)
+{
+  yylval->errmsg = aprintf("Missing %s at end of file", token_end);
+}
+
+static void unexpected_newline(YYSTYPE* yylval, const char* token_end)
+{
+  yylval->errmsg = aprintf("Missing %s at end of line", token_end);
+}
 %}
 
 %option noyywrap nounput noinput
@@ -26,6 +38,7 @@ static string tmp_str;
 
 %x IN_BRACE
 %x IN_BRACKET
+%x IN_BRACKET_FIRST
 %x IN_Q_STRING
 %x IN_QQ_STRING
 
@@ -45,7 +58,11 @@ IS			(u|U|l|L)*
 
 [0-9] { yylval->integer = atol(yytext); return INTEGER; }
 
-"[" yy_push_state(IN_BRACKET);
+"[" yy_push_state(IN_BRACKET_FIRST, yyscanner);
+<IN_BRACKET_FIRST>{
+  "^" { yy_pop_state(yyscanner); yy_push_state(IN_BRACKET, yyscanner); return '^'; }
+  . { yy_pop_state(yyscanner); yy_push_state(IN_BRACKET, yyscanner); yylval->integer = yytext[0]; return CHAR; }
+}
 <IN_BRACKET>{
   "]" {
     yy_pop_state(yyscanner);
@@ -54,14 +71,14 @@ IS			(u|U|l|L)*
       return BRACED_CODE;
     }
   }
-  [^\].A-Za-z0-9_/ \f\n\t\v]+|. {
-    // TODO
-  }
+  [^\]\n] yylval->integer = yytext[0]; return CHAR;
+}
+<IN_BRACKET_FIRST,IN_BRACKET>{
   <<EOF>> unexpected_eof(yylval, "]");
   "\n" unexpected_newline(yylval, "]");
 }
 
-"{" yy_push_state(IN_BRACE);
+"{" yy_push_state(IN_BRACE, yyscanner);
 <IN_BRACE>{
   "'" { yy_push_state(IN_Q_STRING, yyscanner); }
   "\"" { yy_push_state(IN_QQ_STRING, yyscanner); }
@@ -78,7 +95,7 @@ IS			(u|U|l|L)*
   "\n" unexpected_newline(yylval, "}");
 }
 
-"'" yy_push_state(IN_Q_STRING);
+"'" yy_push_state(IN_Q_STRING, yyscanner);
 <IN_Q_STRING>{
   "'" {
     yy_pop_state(yyscanner);
@@ -91,7 +108,7 @@ IS			(u|U|l|L)*
   "\n" unexpected_newline(yylval, "'");
 }
 
-"\"" yy_push_state(IN_QQ_STRING);
+"\"" yy_push_state(IN_QQ_STRING, yyscanner);
 <IN_QQ_STRING>{
   "\"" {
     yy_pop_state(yyscanner);
@@ -119,7 +136,7 @@ IS			(u|U|l|L)*
       yylval->errmsg = aprintf("Invalid number after \\-escape: %s", yytext+1);
       return INVALID_CHARACTER;
     }
-    tmp_str.push_back();
+    tmp_str.push_back(c);
   }
   \\a tmp_str += '\a';
   \\b tmp_str += '\b';
@@ -133,15 +150,3 @@ IS			(u|U|l|L)*
 
 [ \n\t]+ {}
 . { return INVALID_CHARACTER; }
-
-%%
-
-static void unexpected_eof(YYSTATE* yylval, const char* token_end)
-{
-  yylval->errmsg = aprintf("Missing %s at end of file", token_end);
-}
-
-static void unexpected_newline(YYSTATE* yylval, const char* token_end)
-{
-  yylval->errmsg = aprintf("Missing %s at end of line", token_end);
-}

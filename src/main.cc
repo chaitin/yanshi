@@ -1,12 +1,18 @@
 #include "common.hh"
+#include "parser.hh"
 
 #include <cstdio>
+#include <cstdlib>
 #include <getopt.h>
 #include <errno.h>
+#include <execinfo.h>
 #include <cstring>
+#include <cstdarg>
+#include <ctime>
 #include <unistd.h>
 #include <sysexits.h>
 #include <sys/time.h>
+using namespace std;
 
 const size_t BUF_SIZE = 512;
 #define SGR0 "\x1b[m"
@@ -175,22 +181,47 @@ int main(int argc, char *argv[])
   int opt;
   static struct option long_options[] = {
     {"help",                no_argument,       0,   'h'},
-    {"output",              no_argument,       0,   'O'},
+    {"output",              required_argument, 0,   'O'},
     {0,                     0,                 0,   0},
   };
 
   char* opt_output_filename = NULL;
 
-  while ((opt = getopt_long(argc, argv, "Dh:o:", long_options, NULL)) != -1) {
+  while ((opt = getopt_long(argc, argv, "Dho:", long_options, NULL)) != -1) {
     switch (opt) {
     case 'D':
       break;
     case 'h':
+      print_help(stdout);
+      break;
     case 'o':
+      opt_output_filename = optarg;
       break;
     case '?':
       print_help(stderr);
       break;
     }
   }
+  argc -= optind;
+  argv += optind;
+  FILE* file;
+  if (! argc)
+    file = stdout;
+  else if (argc > 1)
+    print_help(stderr);
+  else
+    file = fopen(argv[0], "r");
+  if (! file)
+    err_exit(EX_OSFILE, "fopen '%s'", ! argc ? "stdin" : argv[0]);
+
+  long r;
+  char buf[BUF_SIZE];
+  string data;
+  while ((r = fread(buf, sizeof buf, 1, file)) > 0)
+    data += string(buf, buf+r);
+  LocationFile locfile("-", data);
+  Stmt* toplevel = NULL;
+  int errors = parse(locfile, toplevel);
+
+  fclose(file);
 }

@@ -1,6 +1,7 @@
 %code requires {
 #include "location.hh"
 #include "syntax.hh"
+using std::bitset;
 
 #define YYLTYPE Location
 #define YYLLOC_DEFAULT(Loc, Rhs, N)             \
@@ -13,33 +14,38 @@
       (Loc).end = YYRHSLOC(Rhs, 0).end;         \
     }                                           \
   } while (0)
+
+int parse(const LocationFile& locfile, Stmt*& res);
 }
 
 %locations
 %error-verbose
 %define api.pure
 
-%parse-param {Stmt* res}
-%parse-param {long* errors}
-%parse-param {LocationFile* locfile}
-%lex-param {Stmt* res}
-%parse-param {long* errors}
-%lex-param {LocationFile* locfile}
-%lex-param {struct yyscan_t* lexer}
+%parse-param {Stmt*& res}
+%parse-param {long& errors}
+%parse-param {const LocationFile& locfile}
+%parse-param {void** lexer}
+%lex-param {Stmt*& res}
+%lex-param {long& errors}
+%lex-param {const LocationFile& locfile}
+%lex-param {void** lexer}
 
 %union {
   long integer;
   char* string;
+  bitset<256>* charset;
   Expr* expr;
   Stmt* stmt;
   char* errmsg;
 }
 %destructor { free($$); } <string>
-%destructor { delete $$; } <expr>
-%destructor { delete $$; } <stmt>
+%destructor { if ($$) delete $$; } <expr>
+%destructor { if ($$) delete $$; } <stmt>
+%destructor { if ($$) delete $$; } <charset>
 
 %token INVALID_CHARACTER
-%token <integer> INTEGER
+%token <integer> CHAR INTEGER
 %token <string> IDENT
 %token <string> RANGE
 %token <string> STRING_LITERAL
@@ -50,17 +56,26 @@
 
 %type <stmt> stmt stmt_list
 %type <expr> expr
+%type <charset> bracket bracket_items
 
 %{
+#include "lexer.hh"
+
 #define FAIL(loc, errmsg)                                             \
   do {                                                             \
     Location l = loc;                                              \
-    yyerror(&l, answer, errors, locations, lexer, errmsg);  \
+    yyerror(&l, res, errors, locfile, lexer, errmsg);  \
   } while (0)
 
-int my_yylex(YYSTYPE* yylval, YYLTYPE* loc, long* errors, Stmt* res, LocationFile* locfile, struct yyscan_t* lexer)
+void yyerror(YYLTYPE* loc, Stmt*& res, long& errors, const LocationFile& locfile, yyscan_t* lexer, const char *errmsg)
 {
-  int token = yylex(yylval, loc, lexer);
+  errors++;
+  locfile.locate(*loc, "%s", errmsg);
+}
+
+int yylex(YYSTYPE* yylval, YYLTYPE* loc, Stmt*& res, long& errors, const LocationFile& locfile, yyscan_t* lexer)
+{
+  int token = raw_yylex(yylval, loc, *lexer);
   if (token == INVALID_CHARACTER) {
     FAIL(*loc, yylval->errmsg ? yylval->errmsg : "Invalid character");
     free(yylval->errmsg);
@@ -68,17 +83,12 @@ int my_yylex(YYSTYPE* yylval, YYLTYPE* loc, long* errors, Stmt* res, LocationFil
   }
   return token;
 }
-
-void yyerror(YYLTYPE* loc, long* errors, Stmt* res, int* errors, LocationFile* locfile, struct yyscan_t* lexer, const char *errmsg)
-{
-  ++*errors;
-  locfile->locate(*loc, "%s", errmsg);
-}
 %}
 
 %%
 
-toplevel: stmt_list;
+toplevel:
+  stmt_list { res = $1; }
 
 stmt_list:
     %empty { $$ = new EmptyStmt; }
@@ -88,23 +98,41 @@ stmt:
   IDENT '=' expr { $$ = new AssignStmt($1, $3); }
 
 expr:
-    IDENT { $$ = $1; }
-  | '[' ']' { $$ = $1; }
-  | '&' IDENT { $$ = $2; }
+    IDENT { $$ = new EmbedExpr($1); }
+  | bracket { $$ = new BracketExpr($1); }
+  | '&' IDENT { $$ = new CollapseExpr($2); }
+
+bracket:
+    '[' bracket_items ']' { $$ = $2; }
+  | '[' '^' bracket_items ']' { $$ = $3; }
+
+bracket_items:
+    bracket_items CHAR '-' CHAR {
+      $$ = $1;
+      $1 = NULL;
+      FOR(i, $2, $4+1)
+        $$->set(i);
+    }
+  | bracket_items CHAR {
+      $$ = $1;
+      $1 = NULL;
+      $$->set($2);
+    }
+  | %empty { $$ = new bitset<256>; }
 
 %%
 
-int parse(LocationFile* locfile, Stmt* res)
+int parse(const LocationFile& locfile, Stmt*& res)
 {
   yyscan_t lexer;
   raw_yylex_init_extra(0, &lexer);
-  YY_BUFFER_STATE buf = raw_yy_scan_bytes(locfile->data.c_str(), locfile->data.size(), lexer);
-  int errors = 0;
-  yyparse(res, &errors, locfile, &lexer);
+  YY_BUFFER_STATE buf = raw_yy_scan_bytes(locfile.data.c_str(), locfile.data.size(), lexer);
+  long errors = 0;
+  yyparse(res, errors, locfile, &lexer);
   raw_yy_delete_buffer(buf, lexer);
   raw_yylex_destroy(lexer);
-  if (*errors > 0) {
+  if (errors > 0) {
     // TODO
   }
-  return *errors;
+  return errors;
 }
