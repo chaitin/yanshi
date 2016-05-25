@@ -35,30 +35,29 @@ int parse(const LocationFile& locfile, Stmt*& res);
   long integer;
   char* string;
   bitset<256>* charset;
+  Action* action;
   Expr* expr;
   Stmt* stmt;
   char* errmsg;
 }
-%destructor {
-//printf("free:%p\n", $$);
-free($$);
-} <string>
+%destructor { free($$); } <string>
+%destructor { delete $$; } <action>
 %destructor { delete $$; } <expr>
 %destructor { delete $$; } <stmt>
 %destructor { delete $$; } <charset>
 
-%token INVALID_CHARACTER
+%token ACTION AS EXPORT IMPORT INVALID_CHARACTER SEMISEMI
 %token <integer> CHAR INTEGER
 %token <string> IDENT
 %token <string> STRING_LITERAL
 %token <string> BRACED_CODE
 
-%left '|'
-%left '-'
-%left '+' '*' '?'
+%nonassoc IDENT
+%nonassoc '.'
 
+%type <action> action
 %type <stmt> stmt stmt_list
-%type <expr> expr
+%type <expr> concat_expr difference_expr factor union_expr
 %type <charset> bracket bracket_items
 
 %{
@@ -94,36 +93,68 @@ toplevel:
 
 stmt_list:
     %empty { $$ = new EmptyStmt; }
-  | stmt stmt_list { $1->next = $2; $2->prev = $1; $$ = $1; }
+  | '\n' stmt_list { $$ = $2; }
+  | stmt '\n' stmt_list { $1->next = $3; $3->prev = $1; $$ = $1; }
 
 stmt:
-    IDENT '=' expr ';' { $$ = new AssignStmt($1, $3); }
-  | IDENT ':' '=' expr ';' { $$ = new InstantiationStmt($1, $4); }
+    IDENT '=' union_expr { $$ = new AssignStmt(false, $1, $3); }
+  | EXPORT IDENT '=' union_expr { $$ = new AssignStmt(true, $2, $4); }
+  | IMPORT STRING_LITERAL AS IDENT { $$ = new ImportStmt($2, $4); }
+  | IMPORT STRING_LITERAL { $$ = new ImportStmt($2, NULL); }
+  | ACTION IDENT BRACED_CODE { $$ = new ActionStmt($2, $3); }
 
-expr:
-    IDENT { $$ = new EmbedExpr($1); }
+union_expr:
+    difference_expr { $$ = $1; }
+  | union_expr '|' difference_expr { $$ = new UnionExpr($1, $3); }
+
+difference_expr:
+    concat_expr { $$ = $1; }
+  | difference_expr '-' factor { $$ = new DifferenceExpr($1, $3); }
+
+concat_expr:
+    factor { $$ = $1; }
+  | concat_expr factor { $$ = new ConcatExpr($1, $2); }
+
+factor:
+    IDENT { $$ = new EmbedExpr(NULL, $1); }
+  | IDENT SEMISEMI IDENT { $$ = new EmbedExpr($1, $3); }
+  | '&' IDENT { $$ = new CollapseExpr(NULL, $2); }
+  | '&' IDENT SEMISEMI IDENT { $$ = new CollapseExpr($2, $4); }
+  | STRING_LITERAL { $$ = new LiteralExpr($1); }
+  | '.' { $$ = new DotExpr(); }
   | bracket { $$ = new BracketExpr($1); }
-  | '&' IDENT { $$ = new CollapseExpr($2); }
-  | expr expr { $$ = new ConcatExpr($1, $2); }
-  | expr '*' { $$ = new ClosureExpr($1); }
-  | expr '+' { $$ = new PlusExpr($1); }
-  | expr '-' expr { $$ = new DifferenceExpr($1, $3); }
-  | expr '|' expr { $$ = new UnionExpr($1, $3); }
+  | '(' union_expr ')' { $$ = $2; }
+  | factor '>' action { $$ = $1; $1->entering.push_back($3); }
+  | factor '@' action { $$ = $1; $1->finishing.push_back($3); }
+  | factor '%' action { $$ = $1; $1->leaving.push_back($3); }
+  | factor '$' action { $$ = $1; $1->transiting.push_back($3); }
+  | factor '?' { $$ = new MaybeExpr($1); }
+  | factor '*' { $$ = new ClosureExpr($1); }
+  | factor '+' { $$ = new PlusExpr($1); }
+
+action:
+    IDENT { $$ = new RefAction($1); }
+  | BRACED_CODE { $$ = new InlineAction($1); }
 
 bracket:
     '[' bracket_items ']' { $$ = $2; }
-  | '[' '^' bracket_items ']' { $$ = $3; }
+  | '[' '^' bracket_items ']' {
+      $$ = $3;
+      REP(i, $$->size())
+        $3->flip(i);
+    }
 
 bracket_items:
     bracket_items CHAR '-' CHAR {
       $$ = $1;
-      $1 = NULL;
-      FOR(i, $2, $4+1)
-        $$->set(i);
+      if ($2 > $4)
+        FAIL(yylloc, "Negative range in character class");
+      else
+        FOR(i, $2, $4+1)
+          $$->set(i);
     }
   | bracket_items CHAR {
       $$ = $1;
-      $1 = NULL;
       $$->set($2);
     }
   | %empty { $$ = new bitset<256>; }
@@ -140,7 +171,8 @@ int parse(const LocationFile& locfile, Stmt*& res)
   raw_yy_delete_buffer(buf, lexer);
   raw_yylex_destroy(lexer);
   if (errors > 0) {
-    // TODO
+    stmt_free(res);
+    res = NULL;
   }
   return errors;
 }

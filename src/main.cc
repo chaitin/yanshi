@@ -217,8 +217,10 @@ int main(int argc, char *argv[])
   long r;
   char buf[BUF_SIZE];
   string data;
-  while ((r = fread(buf, 1, sizeof buf, file)) > 0)
+  while ((r = fread(buf, 1, sizeof buf, file)) > 0) {
     data += string(buf, buf+r);
+    if (r < sizeof buf) break;
+  }
   LocationFile locfile("-", data);
   Stmt* toplevel = NULL;
   int errors = parse(locfile, toplevel);

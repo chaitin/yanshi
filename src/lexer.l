@@ -16,7 +16,9 @@ using namespace std;
     yyset_extra(yylloc->end, yyscanner);    \
   } while (0);
 
-static string tmp_str;
+static int my_top_state(yyscan_t yyscanner);
+
+static string tmp_bracket, tmp_str;
 
 static void unexpected_eof(YYSTYPE* yylval, const char* token_end)
 {
@@ -36,10 +38,10 @@ static void unexpected_newline(YYSTYPE* yylval, const char* token_end)
 %option prefix="raw_yy"
 %option stack
 
-%x IN_LINE_COMMENT
 %x IN_BRACE
 %x IN_BRACKET
 %x IN_BRACKET_FIRST
+%x IN_LINE_COMMENT
 %x IN_Q_STRING
 %x IN_QQ_STRING
 
@@ -52,9 +54,14 @@ IS			(u|U|l|L)*
 
 %%
 
+"::" return SEMISEMI;
 "."|"?"|"="|";"|","|":"|"|"|"+"|"-"|"*"|"/"|"%"|"\$"|"<"|">"|"&" { return yytext[0]; }
 "("|")" { return yytext[0]; }
 
+"action" return ACTION;
+"as" return AS;
+"export" return EXPORT;
+"import" return IMPORT;
 {L}({L}|{D})* { yylval->string = strdup(yytext); return IDENT; }
 
 [0-9]+ { yylval->integer = atol(yytext); return INTEGER; }
@@ -66,70 +73,68 @@ IS			(u|U|l|L)*
   . {}
 }
 
-"[" yy_push_state(IN_BRACKET_FIRST, yyscanner);
+"[" yy_push_state(IN_BRACKET_FIRST, yyscanner); return '[';
 <IN_BRACKET_FIRST>{
   "^" { yy_pop_state(yyscanner); yy_push_state(IN_BRACKET, yyscanner); return '^'; }
-  . { yy_pop_state(yyscanner); yy_push_state(IN_BRACKET, yyscanner); yylval->integer = yytext[0]; return CHAR; }
+  [^-\\\]\n] { yy_pop_state(yyscanner); yy_push_state(IN_BRACKET, yyscanner); yylval->integer = yytext[0]; return CHAR; }
 }
 <IN_BRACKET>{
   "]" {
     yy_pop_state(yyscanner);
-    if (yy_top_state(yyscanner) == INITIAL) {
-      yylval->string = strdup(yytext);
-      return BRACED_CODE;
-    }
+    if (my_top_state(yyscanner) == INITIAL)
+      return ']';
   }
-  [^\]\n] yylval->integer = yytext[0]; return CHAR;
+  [^-\\\]\n] yylval->integer = yytext[0]; return CHAR;
 }
 <IN_BRACKET_FIRST,IN_BRACKET>{
-  <<EOF>> unexpected_eof(yylval, "]");
-  "\n" unexpected_newline(yylval, "]");
+  \\. yylval->integer = yytext[1]; return CHAR;
+  - return '-';
+  <<EOF>> unexpected_eof(yylval, "]"); return INVALID_CHARACTER;
+  "\n" unexpected_newline(yylval, "]"); return INVALID_CHARACTER;
 }
 
-"{" yy_push_state(IN_BRACE, yyscanner);
+"{" tmp_bracket.clear(); yy_push_state(IN_BRACE, yyscanner);
 <IN_BRACE>{
-  "'" { yy_push_state(IN_Q_STRING, yyscanner); }
-  "\"" { yy_push_state(IN_QQ_STRING, yyscanner); }
-  "[" { yy_push_state(IN_BRACKET, yyscanner); }
-  "{" { yy_push_state(IN_BRACE, yyscanner); }
+  "'" { tmp_bracket += '\''; yy_push_state(IN_Q_STRING, yyscanner); }
+  "\"" { tmp_bracket += '"'; yy_push_state(IN_QQ_STRING, yyscanner); }
+  "[" { tmp_bracket += '['; yy_push_state(IN_BRACKET, yyscanner); }
+  "{" { tmp_bracket += '{'; yy_push_state(IN_BRACE, yyscanner); }
   "}" {
     yy_pop_state(yyscanner);
-    if (yy_top_state(yyscanner) == INITIAL) {
-      yylval->string = strdup(yytext);
+    if (my_top_state(yyscanner) == INITIAL) {
+      yylval->string = strdup(tmp_bracket.c_str());
       return BRACED_CODE;
     }
   }
-  <<EOF>> unexpected_eof(yylval, "}");
-  "\n" unexpected_newline(yylval, "}");
+  "\n" unexpected_newline(yylval, "}"); return INVALID_CHARACTER;
+  . tmp_bracket += yytext[0];
+  <<EOF>> unexpected_eof(yylval, "}"); return INVALID_CHARACTER;
 }
 
-"'" yy_push_state(IN_Q_STRING, yyscanner);
+"'" tmp_str.clear(); yy_push_state(IN_Q_STRING, yyscanner);
 <IN_Q_STRING>{
   "'" {
     yy_pop_state(yyscanner);
-    if (yy_top_state(yyscanner) == INITIAL) {
+    if (my_top_state(yyscanner) == INITIAL) {
       yylval->string = strdup(tmp_str.c_str());
       return STRING_LITERAL;
     }
   }
+  \\' tmp_str += '\'';
+  \\n unexpected_newline(yylval, "'");
+  . tmp_str += yytext[0];
   <<EOF>> unexpected_eof(yylval, "'");
-  "\n" unexpected_newline(yylval, "'");
 }
 
-"\"" yy_push_state(IN_QQ_STRING, yyscanner);
+"\"" tmp_str.clear(); yy_push_state(IN_QQ_STRING, yyscanner);
 <IN_QQ_STRING>{
   "\"" {
     yy_pop_state(yyscanner);
-    if (yy_top_state(yyscanner) == INITIAL) {
+    if (my_top_state(yyscanner) == INITIAL) {
       yylval->string = strdup(tmp_str.c_str());
       return STRING_LITERAL;
     }
   }
-  <<EOF>> unexpected_eof(yylval, "\"");
-  "\n" unexpected_newline(yylval, "\"");
-}
-
-<IN_Q_STRING,IN_QQ_STRING>{
   \\[0-7]{1,3} {
     long c = strtol(yytext+1, NULL, 8);
     if (UCHAR_MAX < c) {
@@ -154,7 +159,23 @@ IS			(u|U|l|L)*
   \\t tmp_str += '\t';
   \\v tmp_str += '\v';
   \\[\"\'?\\] tmp_str += yytext[1];
+  \\. {
+    yylval->errmsg = aprintf("Invalid \\-escape: %s", yytext);
+    return INVALID_CHARACTER;
+  }
+  . tmp_str += yytext[0];
+  <<EOF>> unexpected_eof(yylval, "\""); return INVALID_CHARACTER;
+  "\n" unexpected_newline(yylval, "\""); return INVALID_CHARACTER;
 }
 
-[ \n\t]+ {}
+"\n" return '\n';
+[ \t]+ {}
 . { yylval->errmsg = strdup("Invalid character"); return INVALID_CHARACTER; }
+
+%%
+
+static int my_top_state(yyscan_t yyscanner)
+{
+  struct yyguts_t* yyg = (struct yyguts_t*)yyscanner;
+  return yyg->yy_start_stack_ptr ? yyg->yy_start_stack[yyg->yy_start_stack_ptr - 1] : INITIAL;
+}
