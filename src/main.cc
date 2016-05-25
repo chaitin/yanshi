@@ -206,7 +206,7 @@ int main(int argc, char *argv[])
   argv += optind;
   FILE* file;
   if (! argc)
-    file = stdout;
+    file = stdin;
   else if (argc > 1)
     print_help(stderr);
   else
@@ -217,11 +217,17 @@ int main(int argc, char *argv[])
   long r;
   char buf[BUF_SIZE];
   string data;
-  while ((r = fread(buf, sizeof buf, 1, file)) > 0)
+  while ((r = fread(buf, 1, sizeof buf, file)) > 0)
     data += string(buf, buf+r);
   LocationFile locfile("-", data);
   Stmt* toplevel = NULL;
   int errors = parse(locfile, toplevel);
+  if (! errors) {
+    StmtPrinter visitor;
+    for (Stmt* x = toplevel; x; x = x->next)
+      visitor.visit(*x);
+    stmt_free(toplevel);
+  }
 
   fclose(file);
 }

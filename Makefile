@@ -1,5 +1,5 @@
-CXXFLAGS := -g3 -Isrc
-O := $(addprefix src/,lexer_helper.o lexer.o location.o main.o parser.o)
+CXXFLAGS := -g3 -Isrc -std=c++1y -fsanitize=undefined,address
+O := $(addprefix src/,lexer_helper.o lexer.o location.o main.o parser.o syntax.o)
 
 all: yanshi
 
@@ -9,7 +9,7 @@ yanshi: $O
 src/parser.o: src/lexer.hh
 src/lexer.o: src/parser.hh
 
-src/main.cc: src/parser.hh
+src/main.o: src/parser.hh src/syntax.hh
 
 src/lexer.cc src/lexer.hh: src/lexer.l
 	flex --header-file=src/lexer.hh -o src/lexer.cc $<

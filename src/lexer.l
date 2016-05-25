@@ -36,6 +36,7 @@ static void unexpected_newline(YYSTYPE* yylval, const char* token_end)
 %option prefix="raw_yy"
 %option stack
 
+%x IN_LINE_COMMENT
 %x IN_BRACE
 %x IN_BRACKET
 %x IN_BRACKET_FIRST
@@ -51,12 +52,19 @@ IS			(u|U|l|L)*
 
 %%
 
-"."|"?"|"="|";"|","|":"|"|"|"+"|"-"|"*"|"/"|"%"|"\$"|"<"|">" { return yytext[0]; }
+"."|"?"|"="|";"|","|":"|"|"|"+"|"-"|"*"|"/"|"%"|"\$"|"<"|">"|"&" { return yytext[0]; }
 "("|")" { return yytext[0]; }
 
 {L}({L}|{D})* { yylval->string = strdup(yytext); return IDENT; }
 
-[0-9] { yylval->integer = atol(yytext); return INTEGER; }
+[0-9]+ { yylval->integer = atol(yytext); return INTEGER; }
+
+"#" yy_push_state(IN_LINE_COMMENT, yyscanner);
+<IN_LINE_COMMENT>{
+  "\n" yy_pop_state(yyscanner);
+  <<EOF>> yy_pop_state(yyscanner);
+  . {}
+}
 
 "[" yy_push_state(IN_BRACKET_FIRST, yyscanner);
 <IN_BRACKET_FIRST>{
@@ -149,4 +157,4 @@ IS			(u|U|l|L)*
 }
 
 [ \n\t]+ {}
-. { return INVALID_CHARACTER; }
+. { yylval->errmsg = strdup("Invalid character"); return INVALID_CHARACTER; }

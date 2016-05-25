@@ -39,19 +39,22 @@ int parse(const LocationFile& locfile, Stmt*& res);
   Stmt* stmt;
   char* errmsg;
 }
-%destructor { free($$); } <string>
-%destructor { if ($$) delete $$; } <expr>
-%destructor { if ($$) delete $$; } <stmt>
-%destructor { if ($$) delete $$; } <charset>
+%destructor {
+//printf("free:%p\n", $$);
+free($$);
+} <string>
+%destructor { delete $$; } <expr>
+%destructor { delete $$; } <stmt>
+%destructor { delete $$; } <charset>
 
 %token INVALID_CHARACTER
 %token <integer> CHAR INTEGER
 %token <string> IDENT
-%token <string> RANGE
 %token <string> STRING_LITERAL
 %token <string> BRACED_CODE
 
-%right '|'
+%left '|'
+%left '-'
 %left '+' '*' '?'
 
 %type <stmt> stmt stmt_list
@@ -79,7 +82,6 @@ int yylex(YYSTYPE* yylval, YYLTYPE* loc, Stmt*& res, long& errors, const Locatio
   if (token == INVALID_CHARACTER) {
     FAIL(*loc, yylval->errmsg ? yylval->errmsg : "Invalid character");
     free(yylval->errmsg);
-    yylval->errmsg = NULL;
   }
   return token;
 }
@@ -95,12 +97,18 @@ stmt_list:
   | stmt stmt_list { $1->next = $2; $2->prev = $1; $$ = $1; }
 
 stmt:
-  IDENT '=' expr { $$ = new AssignStmt($1, $3); }
+    IDENT '=' expr ';' { $$ = new AssignStmt($1, $3); }
+  | IDENT ':' '=' expr ';' { $$ = new InstantiationStmt($1, $4); }
 
 expr:
     IDENT { $$ = new EmbedExpr($1); }
   | bracket { $$ = new BracketExpr($1); }
   | '&' IDENT { $$ = new CollapseExpr($2); }
+  | expr expr { $$ = new ConcatExpr($1, $2); }
+  | expr '*' { $$ = new ClosureExpr($1); }
+  | expr '+' { $$ = new PlusExpr($1); }
+  | expr '-' expr { $$ = new DifferenceExpr($1, $3); }
+  | expr '|' expr { $$ = new UnionExpr($1, $3); }
 
 bracket:
     '[' bracket_items ']' { $$ = $2; }
