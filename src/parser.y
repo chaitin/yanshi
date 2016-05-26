@@ -97,8 +97,8 @@ stmt_list:
   | stmt '\n' stmt_list { $1->next = $3; $3->prev = $1; $$ = $1; }
 
 stmt:
-    IDENT '=' union_expr { $$ = new AssignStmt(false, $1, $3); }
-  | EXPORT IDENT '=' union_expr { $$ = new AssignStmt(true, $2, $4); }
+    IDENT '=' union_expr { $$ = new DefineStmt(false, $1, $3); }
+  | EXPORT IDENT '=' union_expr { $$ = new DefineStmt(true, $2, $4); }
   | IMPORT STRING_LITERAL AS IDENT { $$ = new ImportStmt($2, $4); }
   | IMPORT STRING_LITERAL { $$ = new ImportStmt($2, NULL); }
   | ACTION IDENT BRACED_CODE { $$ = new ActionStmt($2, $3); }

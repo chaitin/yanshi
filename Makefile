@@ -1,5 +1,5 @@
 CXXFLAGS := -g3 -Isrc -std=c++1y -fsanitize=undefined,address
-O := $(addprefix src/,lexer_helper.o lexer.o location.o main.o parser.o syntax.o)
+O := $(addprefix src/,common.o lexer_helper.o lexer.o loader.o location.o main.o option.o parser.o syntax.o)
 
 all: yanshi
 
