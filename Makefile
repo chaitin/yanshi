@@ -1,6 +1,9 @@
 CXXFLAGS := -g3 -Isrc -std=c++1y -fsanitize=undefined,address
 O := $(addprefix src/,common.o lexer_helper.o lexer.o loader.o location.o main.o option.o parser.o syntax.o)
 
+fsa: src/fsa.cc
+	$(LINK.cc) $^ -o $@
+
 all: yanshi
 
 yanshi: $O
