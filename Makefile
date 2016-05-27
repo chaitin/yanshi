@@ -1,18 +1,30 @@
-CXXFLAGS := -g3 -Isrc -std=c++1y -fsanitize=undefined,address
-O := $(addprefix src/,common.o lexer_helper.o lexer.o loader.o location.o main.o option.o parser.o syntax.o)
+CPPFLAGS := -Isrc
+CXXFLAGS := -g3 -std=c++1y -fsanitize=undefined,address
+SRC := $(wildcard src/*.cc)
+OBJ := $(addprefix build/,$(subst src/,,$(SRC:.cc=.o)))
+UNITTEST_SRC := $(wildcard unittest/*.cc)
+UNITTEST_EXE := $(subst unittest/,,$(UNITTEST_SRC:.cc=))
 
-fsa: src/fsa.cc
-	$(LINK.cc) $^ -o $@
+all: build/yanshi unittest
 
-all: yanshi
+unittest: $(addprefix build/unittest/,$(UNITTEST_EXE))
+	$(foreach x,$(addprefix build/unittest/,$(UNITTEST_EXE)),$x < in)
 
-yanshi: $O
-	$(LINK.cc) $^ -o $@
+sinclude $(OBJ:.o=.d)
 
-src/parser.o: src/lexer.hh
-src/lexer.o: src/parser.hh
+build build/unittest:
+	mkdir -p $@
 
-src/main.o: src/parser.hh src/syntax.hh
+build/yanshi: $(OBJ)
+	$(LINK.cc) $^ $(LDLIBS) -o $@
+
+build/%.o: src/%.cc | build
+	g++ $(CPPFLAGS) -MM -MP -MT $@ -MF $(@:.o=.d) $<
+	$(COMPILE.cc) $< -o $@
+
+build/unittest/%: unittest/%.cc $(filter-out build/main.o,$(OBJ)) | build/unittest
+	g++ $(CPPFLAGS) -MM -MP -MT $@ -MF $(@:.o=.d) $<
+	$(LINK.cc) $^ $(LDLIBS) -o $@
 
 src/lexer.cc src/lexer.hh: src/lexer.l
 	flex --header-file=src/lexer.hh -o src/lexer.cc $<
@@ -21,7 +33,7 @@ src/parser.cc src/parser.hh: src/parser.y src/location.hh src/syntax.hh
 	bison --defines=src/parser.hh -o src/parser.cc $<
 
 clean:
-	$(RM) src/*.o
+	$(RM) -r build
 
 distclean: clean
 	$(RM) src/{lexer,parser}.{cc,hh}

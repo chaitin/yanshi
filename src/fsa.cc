@@ -123,7 +123,7 @@ void Fsa::hopcroft_minimize()
     sort(ALL(radj[i]));
 
   vector<long> L(n()), R(n()), B(n()), C(n(), 0), CC(n());
-  vector<bool> mark(n());
+  vector<bool> mark(n(), false);
   long fx = -1, x = -1, fy = -1, y = -1, j = 0;
   REP(i, n())
     if (j < finals.size() && finals[j] == i) {
@@ -144,83 +144,89 @@ void Fsa::hopcroft_minimize()
       L[i] = x;
       x = i;
     }
-  if (x >= 0 && y >= 0) {
+  if (x >= 0)
     L[fx] = x, R[x] = fx;
+  if (y >= 0)
     L[fy] = y, R[y] = fy;
-    set<pair<long, long>> refines;
+  set<pair<long, long>> refines;
+  if (x >= 0 || y >= 0)
     // insert (a, min(finals, non-finals))
     REP(a, 256)
-      refines.emplace(a, C[fx] < C[fy] ? fx : fy);
-    while (refines.size()) {
-      long a;
-      tie(a, fx) = *refines.begin();
-      refines.erase(refines.begin());
-      // clear marks
-      for (x = fx; ; ) {
-        auto it = lower_bound(ALL(radj[x]), make_pair(a, 0L)),
-             ite = upper_bound(ALL(radj[x]), make_pair(a, n()));
-        for (; it != ite; ++it) {
-          y = it->second;
-          CC[B[y]] = 0;
-          mark[y] = false;
-        }
-        if ((x = R[x]) == fx) break;
+      refines.emplace(a, fx >= 0 && C[fx] < C[fy] ? fx : fy);
+  while (refines.size()) {
+    long a;
+    tie(a, fx) = *refines.begin();
+    refines.erase(refines.begin());
+    // count
+    vector<long> bs;
+    for (x = fx; ; ) {
+      auto it = lower_bound(ALL(radj[x]), make_pair(a, 0L)),
+           ite = upper_bound(ALL(radj[x]), make_pair(a, n()));
+      for (; it != ite; ++it) {
+        y = it->second;
+        if (! CC[B[y]]++)
+          bs.push_back(B[y]);
+        mark[y] = true;
       }
-      // count
-      for (x = fx; ; ) {
-        auto it = lower_bound(ALL(radj[x]), make_pair(a, 0L)),
-             ite = upper_bound(ALL(radj[x]), make_pair(a, n()));
-        for (; it != ite; ++it) {
-          y = it->second;
-          CC[B[y]]++;
-          mark[y] = true;
-        }
-        if ((x = R[x]) == fx) break;
-      }
-      // for each refinable set
-      for (x = fx; ; ) {
-        auto it = lower_bound(ALL(radj[x]), make_pair(a, 0L)),
-             ite = upper_bound(ALL(radj[x]), make_pair(a, n()));
-        for (; it != ite; ++it) {
-          fy = B[it->second];
-          if (CC[fy] != C[fy] && ! --CC[fy]) {
-            long fu = -1, u = -1, cu = 0,
-                 fv = -1, v = -1, cv = 0;
-            for (long i = fy; ; ) {
-              if (mark[i]) {
-                if (u < 0)
-                  fu = i;
-                else
-                  R[fu] = i;
-                cu++;
-                B[i] = fu;
-                L[i] = u;
-                u = i;
-              } else {
-                if (v < 0)
-                  fv = i;
-                else
-                  R[fv] = i;
-                cv++;
-                B[i] = fv;
-                L[i] = v;
-                v = i;
-              }
-              if ((i = R[i]) == fy) break;
-            }
-            L[fu] = u, R[u] = fu;
-            L[fv] = v, R[v] = fv;
-            REP(a, 256) {
-              pair<long, long> t{a, fu != y ? fu : fv};
-              if (refines.count({a, fy}))
-                refines.emplace(a, fu != fy ? fu : fv);
-              else
-                refines.emplace(a, cu < cv ? fu : fv);
-            }
+      if ((x = R[x]) == fx) break;
+    }
+    // for each refinable set
+    for (long fy: bs)
+      if (CC[fy] < C[fy]) {
+        long fu = -1, u = -1, cu = 0,
+             fv = -1, v = -1, cv = 0;
+        for (long i = fy; ; ) {
+          if (mark[i]) {
+            if (u < 0)
+              C[fu = i] = 0;
+            else
+              R[fu] = i;
+            C[fu]++;
+            B[i] = fu;
+            L[i] = u;
+            u = i;
+          } else {
+            if (v < 0)
+              C[fv = i] = 0;
+            else
+              R[fv] = i;
+            C[fv]++;
+            B[i] = fv;
+            L[i] = v;
+            v = i;
           }
+          if ((i = R[i]) == fy) break;
         }
-        if ((x = R[x]) == fx) break;
+        L[fu] = u, R[u] = fu;
+        L[fv] = v, R[v] = fv;
+        REP(a, 256) {
+          pair<long, long> t{a, fu != y ? fu : fv};
+          if (refines.count({a, fy}))
+            refines.emplace(a, fu != fy ? fu : fv);
+          else
+            refines.emplace(a, C[fu] < C[fv] ? fu : fv);
+        }
       }
+    // clear marks
+    for (x = fx; ; ) {
+      auto it = lower_bound(ALL(radj[x]), make_pair(a, 0L)),
+           ite = upper_bound(ALL(radj[x]), make_pair(a, n()));
+      for (; it != ite; ++it) {
+        y = it->second;
+        CC[B[y]] = 0;
+        mark[y] = false;
+      }
+      if ((x = R[x]) == fx) break;
     }
   }
+
+  REP(i, n())
+    if (B[i] == i) {
+      printf("%ld:", i);
+      for (long j = i; ; ) {
+        printf(" %ld", j);
+        if ((j = R[j]) == i) break;
+      }
+      puts("");
+    }
 }

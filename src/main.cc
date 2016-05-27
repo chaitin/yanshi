@@ -1,4 +1,5 @@
 #include "common.hh"
+#include "fsa.hh"
 #include "loader.hh"
 #include "option.hh"
 
