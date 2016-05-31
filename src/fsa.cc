@@ -2,6 +2,7 @@
 #include "fsa.hh"
 
 #include <algorithm>
+#include <limits.h>
 #include <queue>
 #include <set>
 #include <unordered_map>
@@ -9,6 +10,20 @@
 #include <utility>
 #include <vector>
 using namespace std;
+
+namespace std
+{
+  template<typename T>
+  struct hash<vector<T>> {
+    size_t operator()(const vector<T>& v) const {
+      hash<T> h;
+      size_t r = 0;
+      for (auto x: v)
+        r = r*17+h(x);
+      return r;
+    }
+  };
+}
 
 bool Fsa::is_final(long x) const
 {
@@ -28,6 +43,7 @@ void Fsa::epsilon_closure(vector<long>& src) const
       }
     }
   }
+  sort(ALL(src));
 }
 
 void Fsa::product(const Fsa& rhs, vector<pair<long, long>>& nodes, vector<vector<pair<long, long>>>& edges) const
@@ -74,13 +90,18 @@ Fsa Fsa::operator&(const Fsa& rhs) const
 Fsa Fsa::operator|(const Fsa& rhs) const
 {
   Fsa r;
-  r.start = 0;
-  vector<pair<long, long>> nodes;
-  product(rhs, nodes, r.adj);
-  REP(i, nodes.size())
-    if (is_final(nodes[i].first) || rhs.is_final(nodes[i].second))
-      r.finals.push_back(i);
-  return r;
+  r.start = n()+rhs.n();
+  r.finals = finals;
+  for (long i: rhs.finals)
+    r.finals.push_back(n()+i);
+  r.adj = adj;
+  r.adj.resize(r.start+1);
+  r.adj[r.start].emplace_back(-1, 0);
+  r.adj[r.start].emplace_back(-1, n());
+  REP(i, rhs.n())
+    for (auto& e: rhs.adj[i])
+      r.adj[n()+i].emplace_back(e.first, n()+e.second);
+  return r.determinize().minimize();
 }
 
 Fsa Fsa::operator~() const
@@ -110,10 +131,53 @@ Fsa Fsa::operator~() const
 Fsa Fsa::determinize() const
 {
   Fsa r;
+  unordered_map<vector<long>, long> m;
+  vector<vector<long>> q{{start}};
+  vector<vector<pair<long, long>>::const_iterator> its(n());
+  vector<long> vs;
+  epsilon_closure(q[0]);
+  m[q[0]] = 0;
+  r.start = 0;
+  REP(i, q.size()) {
+    bool final = false;
+    for (long u: q[i]) {
+      if (binary_search(ALL(finals), u))
+        final = true;
+      its[u] = adj[u].begin();
+      // skip epsilon
+      while (its[u] != adj[u].end() && its[u]->first < 0)
+        ++its[u];
+    }
+    if (final)
+      r.finals.push_back(i);
+    r.adj.emplace_back();
+    for(;;) {
+      // find minimum transition
+      long c = LONG_MAX;
+      for (long u: q[i])
+        if (its[u] != adj[u].end())
+          c = min(c, its[u]->first);
+      if (c == LONG_MAX) break;
+      // successors
+      vs.clear();
+      for (long u: q[i])
+        for (; its[u] != adj[u].end() && its[u]->first == c; ++its[u])
+          vs.push_back(its[u]->second);
+      sort(ALL(vs));
+      vs.erase(unique(ALL(vs)), vs.end());
+      epsilon_closure(vs);
+      auto mit = m.find(vs);
+      if (mit == m.end()) {
+        mit = m.emplace(vs, m.size()).first;
+        q.push_back(vs);
+      }
+      r.adj[i].emplace_back(c, mit->second);
+    }
+  }
   return r;
 }
 
-void Fsa::hopcroft_minimize()
+Fsa Fsa::minimize() const
 {
   vector<vector<pair<long, long>>> radj(n());
   REP(i, n())
@@ -152,7 +216,7 @@ void Fsa::hopcroft_minimize()
   if (x >= 0 || y >= 0)
     // insert (a, min(finals, non-finals))
     REP(a, 256)
-      refines.emplace(a, fx >= 0 && C[fx] < C[fy] ? fx : fy);
+      refines.emplace(a, fy < 0 || fx >= 0 && C[fx] < C[fy] ? fx : fy);
   while (refines.size()) {
     long a;
     tie(a, fx) = *refines.begin();
@@ -220,13 +284,36 @@ void Fsa::hopcroft_minimize()
     }
   }
 
+  Fsa r;
+  long nn = 0;
   REP(i, n())
     if (B[i] == i) {
-      printf("%ld:", i);
       for (long j = i; ; ) {
-        printf(" %ld", j);
+        B[j] = nn;
         if ((j = R[j]) == i) break;
       }
-      puts("");
+      if (binary_search(ALL(finals), i))
+        r.finals.push_back(nn);
+      nn++;
     }
+  r.start = B[start];
+  r.adj.resize(nn);
+  REP(i, n())
+    for (auto& e: adj[i])
+      r.adj[B[i]].emplace_back(e.first, B[e.second]);
+  REP(i, nn) {
+    sort(ALL(r.adj[i]));
+    r.adj[i].erase(unique(ALL(r.adj[i])), r.adj[i].end());
+  }
+  return r;
+
+  //REP(i, n())
+  //  if (B[i] == i) {
+  //    printf("%ld:", i);
+  //    for (long j = i; ; ) {
+  //      printf(" %ld", j);
+  //      if ((j = R[j]) == i) break;
+  //    }
+  //    puts("");
+  //  }
 }

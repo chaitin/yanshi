@@ -4,6 +4,7 @@
 #include "parser.hh"
 
 #include <algorithm>
+#include <string.h>
 #include <stdio.h>
 #include <sysexits.h>
 #include <utility>
@@ -32,20 +33,26 @@ struct ModuleImportDef : PreorderStmtVisitor {
   ModuleImportDef(Module& mo, long& n_errors) : mo(mo), n_errors(n_errors) {}
 
   void visit(ActionStmt& stmt) override {
-    if (mo.named_action.count(stmt.ident))
-      err_msg("Redefined '%s'\n", stmt.ident);
+    if (mo.named_action.count(stmt.ident)) {
+      n_errors++;
+      mo.locfile.locate(stmt.loc, "Redefined '%s'", stmt.ident);
+    }
     mo.named_action[stmt.ident] = stmt.code;
   }
   void visit(DefineStmt& stmt) override {
     mo.defined.insert(stmt.lhs);
   }
   void visit(ImportStmt& stmt) override {
-    Module* m = load_module(stmt.filename);
+    Module* m = load_module(n_errors, stmt.filename);
+    if (! m) {
+      n_errors++;
+      mo.locfile.locate(stmt.loc, "'%s': %s", stmt.filename, errno ? strerror(errno) : "parse error");
+      return;
+    }
     if (stmt.qualified)
       mo.qualified_import[stmt.qualified] = m;
-    else if (count(ALL(mo.unqualified_import), m) == 0) {
+    else if (count(ALL(mo.unqualified_import), m) == 0)
       mo.unqualified_import.push_back(m);
-    }
   }
 };
 
@@ -60,36 +67,40 @@ struct ModuleUse : PreorderActionExprStmtVisitor {
   }
   void visit(CollapseExpr& expr) override {
     if (expr.qualified) {
-      if (! mo.qualified_import.count(expr.qualified))
-        err_msg("%s: Unknown module '%s'\n", mo.filename.c_str(), expr.qualified);
-      else if (! mo.qualified_import[expr.qualified]->defined.count(expr.ident))
-        err_msg("%s: '%s::%s' undefined\n", mo.filename.c_str(), expr.qualified, expr.ident);
-        //mo.locfile.locate();
-        //err_msg("Redefined '%s'\n", stmt.ident);
-        // printf("%s::%s\n", expr.qualified, expr.ident);
+      if (! mo.qualified_import.count(expr.qualified)) {
+        n_errors++;
+        mo.locfile.locate(expr.loc, "Unknown module '%s'", expr.qualified);
+      } else if (! mo.qualified_import[expr.qualified]->defined.count(expr.ident)) {
+        n_errors++;
+        mo.locfile.locate(expr.loc, "'%s::%s' undefined", expr.qualified, expr.ident);
+      }
     } else {
       long c = mo.defined.count(expr.ident);
       for (auto& it: mo.unqualified_import)
         c += it->defined.count(expr.ident);
-      if (! c)
-        err_msg("%s: '%s' undefined\n", mo.filename.c_str(), expr.ident);
+      if (! c) {
+        n_errors++;
+        mo.locfile.locate(expr.loc, "'%s' undefined", expr.ident);
+      }
     }
   }
   void visit(EmbedExpr& expr) override {
     if (expr.qualified) {
-      if (! mo.qualified_import.count(expr.qualified))
-        err_msg("%s: Unknown module '%s'\n", mo.filename.c_str(), expr.qualified);
-      else if (! mo.qualified_import[expr.qualified]->defined.count(expr.ident))
-        err_msg("%s: '%s::%s' undefined\n", mo.filename.c_str(), expr.qualified, expr.ident);
-        //mo.locfile.locate();
-        //err_msg("Redefined '%s'\n", stmt.ident);
-        // printf("%s::%s\n", expr.qualified, expr.ident);
+      if (! mo.qualified_import.count(expr.qualified)) {
+        n_errors++;
+        mo.locfile.locate(expr.loc, "Unknown module '%s'", expr.qualified);
+      } else if (! mo.qualified_import[expr.qualified]->defined.count(expr.ident)) {
+        n_errors++;
+        mo.locfile.locate(expr.loc, "'%s::%s' undefined", expr.qualified, expr.ident);
+      }
     } else {
       long c = mo.defined.count(expr.ident);
       for (auto& it: mo.unqualified_import)
         c += it->defined.count(expr.ident);
-      if (! c)
-        err_msg("%s: '%s' undefined\n", mo.filename.c_str(), expr.ident);
+      if (! c) {
+        n_errors++;
+        mo.locfile.locate(expr.loc, "'%s' undefined", expr.ident);
+      }
     }
   }
   void visit(MaybeExpr& expr) override {
@@ -104,13 +115,13 @@ struct ModuleUse : PreorderActionExprStmtVisitor {
   }
 };
 
-Module* load_module(const char* filename)
+Module* load_module(long& n_errors, const char* filename)
 {
-  FILE* file = filename ? fopen(filename, "r") : stdin;
+  FILE* file = strcmp(filename, "-") ? fopen(filename, "r") : stdin;
   if (! file)
-    err_exit(EX_OSFILE, "fopen '%s'", filename);
+    return NULL;
   pair<dev_t, ino_t> inode{0, 0}; // stdin -> {0, 0}
-  if (filename) {
+  if (file != stdin) {
     struct stat sb;
     if (fstat(fileno(file), &sb) < 0)
       err_exit(EX_OSFILE, "fstat '%s'", filename);
@@ -119,7 +130,7 @@ Module* load_module(const char* filename)
   if (inode2module.count(inode))
     return &inode2module[inode];
 
-  string module{filename ? filename : "main"};
+  string module{file != stdin ? filename : "main"};
   string::size_type t = module.find('.');
   if (t != string::npos)
     module.erase(t, module.size()-t);
@@ -131,22 +142,28 @@ Module* load_module(const char* filename)
     data += string(buf, buf+r);
     if (r < sizeof buf) break;
   }
-  LocationFile locfile("-", data);
+  if (data.empty() || data.back() != '\n')
+    data.push_back('\n');
+  LocationFile locfile(filename, data);
 
   Stmt* toplevel = NULL;
   long errors = parse(locfile, toplevel);
-  if (! toplevel)
-    err_exit(EX_DATAERR, "Failed to load '%s'", filename);
+  if (! toplevel) {
+    n_errors += errors;
+    return NULL;
+  }
   Module& mo = inode2module[inode];
+  mo.locfile = locfile;
   mo.filename = filename;
   mo.toplevel = toplevel;
   return &mo;
 }
 
-void load(const char* filename)
+long load(const char* filename)
 {
   long n_errors = 0;
-  load_module(filename);
+  if (! load_module(n_errors, filename))
+    return n_errors;
 
   if (! n_errors)
     for (auto& it: inode2module) {
@@ -178,6 +195,8 @@ void load(const char* filename)
         x->accept(p);
     }
   }
+
+  return n_errors;
 }
 
 void unload_all()

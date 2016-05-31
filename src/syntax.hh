@@ -1,5 +1,6 @@
 #pragma once
 #include "common.hh"
+#include "location.hh"
 #include <bitset>
 #include <string>
 #include <vector>
@@ -76,6 +77,8 @@ struct Visitor<Stmt> {
 //// Action
 
 struct Action : VisitableBase<Action> {
+
+  Location loc;
   virtual ~Action() = default;
 };
 
@@ -98,6 +101,7 @@ struct RefAction : Visitable<Action, RefAction> {
 //// Expr
 
 struct Expr : VisitableBase<Expr> {
+  Location loc;
   std::vector<Action*> entering, finishing, leaving, transiting;
   virtual ~Expr() = default;
 };
@@ -189,6 +193,7 @@ struct UnionExpr : Visitable<Expr, UnionExpr> {
 //// Stmt
 
 struct Stmt {
+  Location loc;
   Stmt *prev = NULL, *next = NULL;
   virtual ~Stmt() = default;
   virtual void accept(Visitor<Stmt>& visitor) = 0;

@@ -13,6 +13,14 @@
 #define FOR(i, a, b) for (typename std::remove_cv<typename std::remove_reference<decltype(b)>::type>::type i = (a); i < (b); i++)
 #define ROF(i, a, b) for (typename std::remove_cv<typename std::remove_reference<decltype(b)>::type>::type i = (b); --i >= (a); )
 
+#define SGR0 "\x1b[m"
+#define RED "\x1b[1;31m"
+#define GREEN "\x1b[32m"
+#define YELLOW "\x1b[1;33m"
+#define BLUE "\x1b[1;34m"
+#define MAGENTA "\x1b[1;35m"
+#define CYAN "\x1b[36m"
+
 const size_t BUF_SIZE = 512;
 
 void output_error(bool use_err, const char *format, va_list ap);

@@ -5,6 +5,7 @@
 #include <string>
 
 struct Module {
+  LocationFile locfile;
   std::string filename;
   Stmt* toplevel;
   std::set<std::string> defined;
@@ -13,6 +14,6 @@ struct Module {
   std::map<std::string, std::string> named_action;
 };
 
-void load(const char* filename);
-Module* load_module(const char* filename);
+long load(const char* filename);
+Module* load_module(long& n_errors, const char* filename);
 void unload_all();

@@ -63,10 +63,10 @@ int parse(const LocationFile& locfile, Stmt*& res);
 %{
 #include "lexer.hh"
 
-#define FAIL(loc, errmsg)                                             \
+#define FAIL(loc, errmsg)                                          \
   do {                                                             \
     Location l = loc;                                              \
-    yyerror(&l, res, errors, locfile, lexer, errmsg);  \
+    yyerror(&l, res, errors, locfile, lexer, errmsg);              \
   } while (0)
 
 void yyerror(YYLTYPE* loc, Stmt*& res, long& errors, const LocationFile& locfile, yyscan_t* lexer, const char *errmsg)
@@ -95,13 +95,15 @@ stmt_list:
     %empty { $$ = new EmptyStmt; }
   | '\n' stmt_list { $$ = $2; }
   | stmt '\n' stmt_list { $1->next = $3; $3->prev = $1; $$ = $1; }
+  | error '\n' stmt_list { $$ = $3; }
 
 stmt:
-    IDENT '=' union_expr { $$ = new DefineStmt(false, $1, $3); }
-  | EXPORT IDENT '=' union_expr { $$ = new DefineStmt(true, $2, $4); }
-  | IMPORT STRING_LITERAL AS IDENT { $$ = new ImportStmt($2, $4); }
-  | IMPORT STRING_LITERAL { $$ = new ImportStmt($2, NULL); }
-  | ACTION IDENT BRACED_CODE { $$ = new ActionStmt($2, $3); }
+    IDENT '=' union_expr { $$ = new DefineStmt(false, $1, $3); $$->loc = yyloc; }
+  | EXPORT IDENT '=' union_expr { $$ = new DefineStmt(true, $2, $4); $$->loc = yyloc; }
+  | IMPORT STRING_LITERAL AS IDENT { $$ = new ImportStmt($2, $4); $$->loc = yyloc; }
+  | IMPORT STRING_LITERAL { $$ = new ImportStmt($2, NULL); $$->loc = yyloc; }
+  | ACTION IDENT BRACED_CODE { $$ = new ActionStmt($2, $3); $$->loc = yyloc; }
+  | error {}
 
 union_expr:
     difference_expr { $$ = $1; }
@@ -116,12 +118,12 @@ concat_expr:
   | concat_expr factor { $$ = new ConcatExpr($1, $2); }
 
 factor:
-    IDENT { $$ = new EmbedExpr(NULL, $1); }
-  | IDENT SEMISEMI IDENT { $$ = new EmbedExpr($1, $3); }
-  | '&' IDENT { $$ = new CollapseExpr(NULL, $2); }
-  | '&' IDENT SEMISEMI IDENT { $$ = new CollapseExpr($2, $4); }
-  | STRING_LITERAL { $$ = new LiteralExpr($1); }
-  | '.' { $$ = new DotExpr(); }
+    IDENT { $$ = new EmbedExpr(NULL, $1); $$->loc = yyloc; }
+  | IDENT SEMISEMI IDENT { $$ = new EmbedExpr($1, $3); $$->loc = yyloc; }
+  | '&' IDENT { $$ = new CollapseExpr(NULL, $2); $$->loc = yyloc; }
+  | '&' IDENT SEMISEMI IDENT { $$ = new CollapseExpr($2, $4); $$->loc = yyloc; }
+  | STRING_LITERAL { $$ = new LiteralExpr($1); $$->loc = yyloc; }
+  | '.' { $$ = new DotExpr(); $$->loc = yyloc; }
   | bracket { $$ = new BracketExpr($1); }
   | '(' union_expr ')' { $$ = $2; }
   | factor '>' action { $$ = $1; $1->entering.push_back($3); }
@@ -133,8 +135,8 @@ factor:
   | factor '+' { $$ = new PlusExpr($1); }
 
 action:
-    IDENT { $$ = new RefAction($1); }
-  | BRACED_CODE { $$ = new InlineAction($1); }
+    IDENT { $$ = new RefAction($1); $$->loc = yyloc; }
+  | BRACED_CODE { $$ = new InlineAction($1); $$->loc = yyloc; }
 
 bracket:
     '[' bracket_items ']' { $$ = $2; }
@@ -148,7 +150,7 @@ bracket_items:
     bracket_items CHAR '-' CHAR {
       $$ = $1;
       if ($2 > $4)
-        FAIL(yylloc, "Negative range in character class");
+        FAIL(yyloc, "Negative range in character class");
       else
         FOR(i, $2, $4+1)
           $$->set(i);

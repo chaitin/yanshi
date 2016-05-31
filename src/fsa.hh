@@ -1,3 +1,4 @@
+#pragma once
 #include <utility>
 #include <vector>
 using std::vector;
@@ -16,6 +17,6 @@ struct Fsa {
   Fsa operator&(const Fsa& rhs) const;
   Fsa operator|(const Fsa& rhs) const;
   Fsa operator-(const Fsa& rhs) const;
-  void hopcroft_minimize();
+  Fsa minimize() const;
   Fsa determinize() const;
 };

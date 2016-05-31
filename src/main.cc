@@ -62,6 +62,7 @@ int main(int argc, char *argv[])
   argc -= optind;
   argv += optind;
 
-  load(argc ? argv[0] : NULL);
+  long n_errors = load(argc ? argv[0] : "-");
   unload_all();
+  return n_errors ? 2 : 0;
 }
