@@ -27,7 +27,7 @@ namespace std
 
 bool Fsa::is_final(long x) const
 {
-  return lower_bound(ALL(finals), x) != finals.end();
+  return binary_search(ALL(finals), x);
 }
 
 void Fsa::epsilon_closure(vector<long>& src) const
@@ -46,14 +46,57 @@ void Fsa::epsilon_closure(vector<long>& src) const
   sort(ALL(src));
 }
 
-void Fsa::product(const Fsa& rhs, vector<pair<long, long>>& nodes, vector<vector<pair<long, long>>>& edges) const
+Fsa Fsa::operator-(const Fsa& rhs) const
 {
+  Fsa r;
+  vector<pair<long, long>> q;
   long u0, u1, v0, v1;
   unordered_map<long, long> m;
-  nodes.emplace_back(start, rhs.start);
+  q.emplace_back(start, rhs.start);
+  m[(rhs.n()+1) * start + rhs.start] = 0;
+  r.start = 0;
+  REP(i, q.size()) {
+    tie(u0, u1) = q[i];
+    if (is_final(u0) && ! rhs.is_final(u1))
+      r.finals.push_back(i);
+    r.adj.emplace_back();
+    vector<pair<long, long>>::const_iterator it0 = adj[u0].begin(), it1, it1e;
+    if (u1 == rhs.n())
+      it1 = it1e = rhs.adj[0].end();
+    else {
+      it1 = rhs.adj[u1].begin();
+      it1e = rhs.adj[u1].end();
+    }
+    for (; it0 != adj[u0].end(); ++it0) {
+      while (it1 != it1e && it1->first < it0->first)
+        ++it1;
+      long v1 = it1 != it1e || it1->first == it1e->first ? it1->second : rhs.n(),
+           t = (rhs.n()+1) * it0->second + v1;
+      auto mit = m.find(t);
+      if (mit == m.end()) {
+        mit = m.emplace(t, m.size()).first;
+        q.emplace_back(it0->second, it1->second);
+      }
+      r.adj[i].emplace_back(it0->first, mit->second);
+    }
+  }
+  return r;
+}
+
+Fsa Fsa::operator&(const Fsa& rhs) const
+{
+  Fsa r;
+  vector<pair<long, long>> q;
+  long u0, u1, v0, v1;
+  unordered_map<long, long> m;
+  q.emplace_back(start, rhs.start);
   m[rhs.n() * start + rhs.start] = 0;
-  REP(i, nodes.size()) {
-    tie(u0, u0) = nodes[i];
+  r.start = 0;
+  REP(i, q.size()) {
+    tie(u0, u1) = q[i];
+    if (is_final(u0) && rhs.is_final(u1))
+      r.finals.push_back(i);
+    r.adj.emplace_back();
     auto it0 = adj[u0].begin(), it1 = rhs.adj[u1].begin();
     while (it0 != adj[u0].end() && it1 != rhs.adj[u1].end()) {
       if (it0->first < it1->first)
@@ -62,28 +105,17 @@ void Fsa::product(const Fsa& rhs, vector<pair<long, long>>& nodes, vector<vector
         ++it1;
       else {
         long t = rhs.n() * it0->second + it1->second;
-        if (m.count(t)) {
-          long id = m.size();
-          m[t] = id;
-          nodes.emplace_back(it0->second, it1->second);
+        auto mit = m.find(t);
+        if (mit == m.end()) {
+          mit = m.emplace(t, m.size()).first;
+          q.emplace_back(it0->second, it1->second);
         }
-        edges[i].emplace_back(it0->first, m[t]);
+        r.adj[i].emplace_back(it0->first, mit->second);
         ++it0;
         ++it1;
       }
     }
   }
-}
-
-Fsa Fsa::operator&(const Fsa& rhs) const
-{
-  Fsa r;
-  r.start = 0;
-  vector<pair<long, long>> nodes;
-  product(rhs, nodes, r.adj);
-  REP(i, nodes.size())
-    if (is_final(nodes[i].first) && rhs.is_final(nodes[i].second))
-      r.finals.push_back(i);
   return r;
 }
 

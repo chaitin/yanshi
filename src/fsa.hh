@@ -12,11 +12,16 @@ struct Fsa {
   long n() const { return adj.size(); }
   bool is_final(long x) const;
   void epsilon_closure(vector<long>& src) const;
-  void product(const Fsa& rhs, vector<pair<long, long>>& states, vector<vector<pair<long, long>>>& res_adj) const;
+  // DFA -> DFA
   Fsa operator~() const;
+  // DFA -> DFA -> DFA
   Fsa operator&(const Fsa& rhs) const;
+  // * -> * -> DFA
   Fsa operator|(const Fsa& rhs) const;
+  // DFA -> DFA -> DFA
   Fsa operator-(const Fsa& rhs) const;
+  // DFA -> DFA
   Fsa minimize() const;
+  // * -> DFA
   Fsa determinize() const;
 };
