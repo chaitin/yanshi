@@ -13,5 +13,7 @@ struct LocationFile {
   LocationFile() = default;
   LocationFile(const std::string& filename, const std::string& data);
   LocationFile& operator=(const LocationFile&) = default;
-  void locate(const Location& loc, const char* fmt, ...) const;
+  void context(const Location& loc) const;
+  void locate(const Location& loc, long& line1, long& col1, long& line2, long& col2) const;
+  void error(const Location& loc, const char* fmt, ...) const;
 };

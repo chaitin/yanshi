@@ -6,7 +6,6 @@ struct FsaAnno {
   bool deterministic;
   Fsa fsa;
   vector<vector<Expr*> > assoc;
-  //FsaAnno& operator=(FsaAnno&&) = default;
   void collapse(CollapseExpr& expr);
   void concat(FsaAnno& rhs);
   void determinize();

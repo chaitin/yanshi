@@ -4,10 +4,16 @@
 #endif
 #include <assert.h>
 #include <stdio.h>
+#include <stdint.h>
 #include <stdarg.h>
 #include <type_traits>
 #include <vector>
 using std::vector;
+
+typedef int8_t i8;
+typedef int16_t i16;
+typedef int32_t i32;
+typedef int64_t i64;
 
 #define LEN_OF(x) (sizeof(x)/sizeof(*x))
 #define ALL(x) (x).begin(), (x).end()
@@ -41,8 +47,8 @@ extern FILE* debug_file;
 #ifdef DEBUG
 # define DP(level, ...)  do {          \
     if (level <= debug_level) {        \
-      fprintf(debug_file, "%s:%d:", __FILE__, __LINE__); \
-      fprintf(debug_file, __VA_ARG__); \
+      fprintf(debug_file, "%s:%d ", __FILE__, __LINE__); \
+      fprintf(debug_file, __VA_ARGS__);\
       fprintf(debug_file, "\n");       \
       fflush(debug_file);              \
     }                                  \

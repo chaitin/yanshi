@@ -16,19 +16,11 @@ LocationFile::LocationFile(const string& filename, const string& data) : filenam
   linemap[line] = data.size();
 }
 
-void LocationFile::locate(const Location& loc, const char* fmt, ...) const
+void LocationFile::context(const Location& loc) const
 {
-  va_list va;
-  va_start(va, fmt);
-  long line1 = upper_bound(ALL(linemap), loc.start) - linemap.begin() - 1,
-       line2 = upper_bound(ALL(linemap), max(loc.end-1, 0L)) - linemap.begin() - 1,
-       col1 = loc.start - linemap[line1],
-       col2 = loc.end - linemap[line2];
+  long line1, col1, line2, col2;
+  locate(loc, line1, col1, line2, col2);
   if (line1 == line2) {
-    fprintf(stderr, YELLOW "%s" CYAN ":%ld:%ld-%ld: " RED, filename.c_str(), line1+1, col1+1, col2);
-    vfprintf(stderr, fmt, va);
-    fputs("\n", stderr);
-    fputs(SGR0, stderr);
     FOR(i, linemap[line1], line1+1 < linemap.size() ? linemap[line1+1] : data.size()) {
       if (i == loc.start)
         fputs(MAGENTA, stderr);
@@ -37,10 +29,6 @@ void LocationFile::locate(const Location& loc, const char* fmt, ...) const
         fputs(SGR0, stderr);
     }
   } else {
-    fprintf(stderr, YELLOW "%s" CYAN ":%ld-%ld:%ld-%ld: " RED, filename.c_str(), line1+1, line2+1, col1+1, col2);
-    vfprintf(stderr, fmt, va);
-    fputs("\n", stderr);
-    fputs(SGR0, stderr);
     FOR(i, linemap[line1], linemap[line1+1]) {
       if (i == loc.start)
         fputs(MAGENTA, stderr);
@@ -63,5 +51,28 @@ void LocationFile::locate(const Location& loc, const char* fmt, ...) const
     }
     fputs(SGR0, stderr);
   }
+}
+
+void LocationFile::locate(const Location& loc, long& line1, long& col1, long& line2, long& col2) const
+{
+  line1 = upper_bound(ALL(linemap), loc.start) - linemap.begin() - 1;
+  line2 = upper_bound(ALL(linemap), max(loc.end-1, 0L)) - linemap.begin() - 1;
+  col1 = loc.start - linemap[line1];
+  col2 = loc.end - linemap[line2];
+}
+
+void LocationFile::error(const Location& loc, const char* fmt, ...) const
+{
+  va_list va;
+  va_start(va, fmt);
+  long line1, col1, line2, col2;
+  locate(loc, line1, col1, line2, col2);
+  if (line1 == line2)
+    fprintf(stderr, YELLOW "%s" CYAN ":%ld:%ld-%ld: " RED, filename.c_str(), line1+1, col1+1, col2);
+  else
+    fprintf(stderr, YELLOW "%s" CYAN ":%ld-%ld:%ld-%ld: " RED, filename.c_str(), line1+1, line2+1, col1+1, col2);
+  vfprintf(stderr, fmt, va);
+  fputs(SGR0 "\n", stderr);
+  context(loc);
   va_end(va);
 }

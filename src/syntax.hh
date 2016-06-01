@@ -1,6 +1,7 @@
 #pragma once
 #include "common.hh"
 #include "location.hh"
+
 #include <bitset>
 #include <string>
 #include <vector>
@@ -41,6 +42,7 @@ struct ConcatExpr;
 struct DifferenceExpr;
 struct DotExpr;
 struct EmbedExpr;
+struct IntersectExpr;
 struct LiteralExpr;
 struct PlusExpr;
 struct QuestionExpr;
@@ -55,6 +57,7 @@ struct Visitor<Expr> {
   virtual void visit(DifferenceExpr&) = 0;
   virtual void visit(DotExpr&) = 0;
   virtual void visit(EmbedExpr&) = 0;
+  virtual void visit(IntersectExpr&) = 0;
   virtual void visit(LiteralExpr&) = 0;
   virtual void visit(PlusExpr&) = 0;
   virtual void visit(QuestionExpr&) = 0;
@@ -144,10 +147,20 @@ struct DotExpr : Visitable<Expr, DotExpr> {};
 
 struct EmbedExpr : Visitable<Expr, EmbedExpr> {
   char *qualified, *ident;
+  DefineStmt* define_stmt = NULL; // set by ModuleImportDef
   EmbedExpr(char* qualified, char* ident) : qualified(qualified), ident(ident) {}
   ~EmbedExpr() {
     free(qualified); // may be NULL
     free(ident);
+  }
+};
+
+struct IntersectExpr : Visitable<Expr, IntersectExpr> {
+  Expr *lhs, *rhs;
+  IntersectExpr(Expr* lhs, Expr* rhs) : lhs(lhs), rhs(rhs) {}
+  ~IntersectExpr() {
+    delete lhs;
+    delete rhs;
   }
 };
 
@@ -212,10 +225,12 @@ struct ActionStmt : Visitable<Stmt, ActionStmt> {
   }
 };
 
+struct Module;
 struct DefineStmt : Visitable<Stmt, DefineStmt> {
   bool export_;
   char* lhs;
   Expr* rhs;
+  Module* module; // used in topological sort
   DefineStmt(bool export_, char* lhs, Expr* rhs) : export_(export_), lhs(lhs), rhs(rhs) {}
   ~DefineStmt() {
     free(lhs);
@@ -305,6 +320,13 @@ struct StmtPrinter : Visitor<Action>, Visitor<Expr>, Visitor<Stmt> {
     else
       printf("%s\n", expr.ident);
   }
+  void visit(IntersectExpr& expr) override {
+    printf("%*s%s\n", 2*depth, "", "IntersectExpr");
+    depth++;
+    expr.lhs->accept(*this);
+    expr.rhs->accept(*this);
+    depth--;
+  }
   void visit(LiteralExpr& expr) override {
     printf("%*s%s\n", 2*depth, "", "LiteralExpr");
     printf("%*s%s\n", 2*(depth+1), "", expr.literal);
@@ -379,10 +401,20 @@ struct PreorderActionExprStmtVisitor : Visitor<Action>, Visitor<Expr>, Visitor<S
   void visit(Expr& expr) override { expr.accept(*this); }
   void visit(BracketExpr& expr) override {}
   void visit(CollapseExpr& expr) override {}
-  void visit(ConcatExpr& expr) override {}
-  void visit(DifferenceExpr& expr) override {}
+  void visit(ConcatExpr& expr) override {
+    expr.lhs->accept(*this);
+    expr.rhs->accept(*this);
+  }
+  void visit(DifferenceExpr& expr) override {
+    expr.lhs->accept(*this);
+    expr.rhs->accept(*this);
+  }
   void visit(DotExpr& expr) override {}
   void visit(EmbedExpr& expr) override {}
+  void visit(IntersectExpr& expr) override {
+    expr.lhs->accept(*this);
+    expr.rhs->accept(*this);
+  }
   void visit(LiteralExpr& expr) override {}
   void visit(PlusExpr& expr) override { expr.inner->accept(*this); }
   void visit(QuestionExpr& expr) override { expr.inner->accept(*this); }

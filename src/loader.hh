@@ -1,5 +1,6 @@
 #pragma once
 #include "syntax.hh"
+
 #include <map>
 #include <set>
 #include <string>
@@ -10,10 +11,11 @@ using std::string;
 using std::vector;
 
 struct Module {
+  bool processed = false;
   LocationFile locfile;
   string filename;
   Stmt* toplevel;
-  set<string> defined;
+  map<string, DefineStmt*> defined;
   vector<Module*> unqualified_import;
   map<string, Module*> qualified_import;
   map<string, string> named_action;

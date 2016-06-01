@@ -57,7 +57,7 @@ int parse(const LocationFile& locfile, Stmt*& res);
 
 %type <action> action
 %type <stmt> stmt stmt_list
-%type <expr> concat_expr difference_expr factor union_expr
+%type <expr> concat_expr difference_expr factor intersect_expr union_expr
 %type <charset> bracket bracket_items
 
 %{
@@ -72,7 +72,7 @@ int parse(const LocationFile& locfile, Stmt*& res);
 void yyerror(YYLTYPE* loc, Stmt*& res, long& errors, const LocationFile& locfile, yyscan_t* lexer, const char *errmsg)
 {
   errors++;
-  locfile.locate(*loc, "%s", errmsg);
+  locfile.error(*loc, "%s", errmsg);
 }
 
 int yylex(YYSTYPE* yylval, YYLTYPE* loc, Stmt*& res, long& errors, const LocationFile& locfile, yyscan_t* lexer)
@@ -103,15 +103,19 @@ stmt:
   | IMPORT STRING_LITERAL AS IDENT { $$ = new ImportStmt($2, $4); $$->loc = yyloc; }
   | IMPORT STRING_LITERAL { $$ = new ImportStmt($2, NULL); $$->loc = yyloc; }
   | ACTION IDENT BRACED_CODE { $$ = new ActionStmt($2, $3); $$->loc = yyloc; }
-  | error {}
+  /*| error {}*/
 
 union_expr:
+    intersect_expr { $$ = $1; }
+  | union_expr '|' intersect_expr { $$ = new UnionExpr($1, $3); }
+
+intersect_expr:
     difference_expr { $$ = $1; }
-  | union_expr '|' difference_expr { $$ = new UnionExpr($1, $3); }
+  | intersect_expr '|' difference_expr { $$ = new IntersectExpr($1, $3); }
 
 difference_expr:
     concat_expr { $$ = $1; }
-  | difference_expr '-' factor { $$ = new DifferenceExpr($1, $3); }
+  | difference_expr '-' concat_expr { $$ = new DifferenceExpr($1, $3); }
 
 concat_expr:
     factor { $$ = $1; }
@@ -120,8 +124,8 @@ concat_expr:
 factor:
     IDENT { $$ = new EmbedExpr(NULL, $1); $$->loc = yyloc; }
   | IDENT SEMISEMI IDENT { $$ = new EmbedExpr($1, $3); $$->loc = yyloc; }
-  | '&' IDENT { $$ = new CollapseExpr(NULL, $2); $$->loc = yyloc; }
-  | '&' IDENT SEMISEMI IDENT { $$ = new CollapseExpr($2, $4); $$->loc = yyloc; }
+  | '!' IDENT { $$ = new CollapseExpr(NULL, $2); $$->loc = yyloc; }
+  | '!' IDENT SEMISEMI IDENT { $$ = new CollapseExpr($2, $4); $$->loc = yyloc; }
   | STRING_LITERAL { $$ = new LiteralExpr($1); $$->loc = yyloc; }
   | '.' { $$ = new DotExpr(); $$->loc = yyloc; }
   | bracket { $$ = new BracketExpr($1); }

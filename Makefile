@@ -1,7 +1,7 @@
-CPPFLAGS := -Isrc -I.
-CFLAGS := -g3 -std=c++1y -fsanitize=undefined,address
+CPPFLAGS := -Isrc -I. -DDEBUG
+CFLAGS := -g3 -std=c++1y # -fsanitize=undefined,address
 CXXFLAGS := $(CFLAGS)
-LDLIBS := $(CFLAGS) -lasan -lubsan
+LDLIBS := $(CFLAGS) # -lasan -lubsan
 SRC := $(filter-out src/lexer.cc src/parser.cc, $(wildcard src/*.cc)) src/lexer.cc src/parser.cc
 OBJ := $(addprefix build/,$(subst src/,,$(SRC:.cc=.o)))
 UNITTEST_SRC := $(wildcard unittest/*.cc)

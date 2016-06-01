@@ -1,17 +1,23 @@
 #include "common.hh"
+#include "compiler.hh"
 #include "loader.hh"
 #include "option.hh"
 #include "parser.hh"
 
 #include <algorithm>
-#include <string.h>
+#include <unordered_map>
+#include <unordered_set>
+#include <functional>
 #include <stdio.h>
+#include <stack>
+#include <string.h>
+#include <sys/stat.h>
 #include <sysexits.h>
 #include <utility>
-#include <sys/stat.h>
 using namespace std;
 
 static map<pair<dev_t, ino_t>, Module> inode2module;
+static unordered_map<DefineStmt*, vector<DefineStmt*>> depended_by; // key ranges over all DefineStmt
 
 void print_module_info(Module& mo)
 {
@@ -24,7 +30,7 @@ void print_module_info(Module& mo)
     printf("  %s\n", x->filename.c_str());
   puts("defined:");
   for (auto& x: mo.defined)
-    printf("  %s\n", x.c_str());
+    printf("  %s\n", x.first.c_str());
 }
 
 struct ModuleImportDef : PreorderStmtVisitor {
@@ -35,18 +41,20 @@ struct ModuleImportDef : PreorderStmtVisitor {
   void visit(ActionStmt& stmt) override {
     if (mo.named_action.count(stmt.ident)) {
       n_errors++;
-      mo.locfile.locate(stmt.loc, "Redefined '%s'", stmt.ident);
+      mo.locfile.error(stmt.loc, "Redefined '%s'", stmt.ident);
     }
     mo.named_action[stmt.ident] = stmt.code;
   }
   void visit(DefineStmt& stmt) override {
-    mo.defined.insert(stmt.lhs);
+    mo.defined.emplace(stmt.lhs, &stmt);
+    stmt.module = &mo;
+    depended_by[&stmt]; // empty
   }
   void visit(ImportStmt& stmt) override {
     Module* m = load_module(n_errors, stmt.filename);
     if (! m) {
       n_errors++;
-      mo.locfile.locate(stmt.loc, "'%s': %s", stmt.filename, errno ? strerror(errno) : "parse error");
+      mo.locfile.error(stmt.loc, "'%s': %s", stmt.filename, errno ? strerror(errno) : "parse error");
       return;
     }
     if (stmt.qualified)
@@ -59,17 +67,24 @@ struct ModuleImportDef : PreorderStmtVisitor {
 struct ModuleUse : PreorderActionExprStmtVisitor {
   Module& mo;
   long& n_errors;
+  DefineStmt* define_stmt = NULL;
   ModuleUse(Module& mo, long& n_errors) : mo(mo), n_errors(n_errors) {}
+
+  void visit(DefineStmt& stmt) override {
+    define_stmt = &stmt;
+    stmt.rhs->accept(*this);
+    define_stmt = NULL;
+  }
 
   void visit(BracketExpr& expr) override {}
   void visit(CollapseExpr& expr) override {
     if (expr.qualified) {
       if (! mo.qualified_import.count(expr.qualified)) {
         n_errors++;
-        mo.locfile.locate(expr.loc, "Unknown module '%s'", expr.qualified);
+        mo.locfile.error(expr.loc, "Unknown module '%s'", expr.qualified);
       } else if (! mo.qualified_import[expr.qualified]->defined.count(expr.ident)) {
         n_errors++;
-        mo.locfile.locate(expr.loc, "'%s::%s' undefined", expr.qualified, expr.ident);
+        mo.locfile.error(expr.loc, "'%s::%s' undefined", expr.qualified, expr.ident);
       }
     } else {
       long c = mo.defined.count(expr.ident);
@@ -77,7 +92,7 @@ struct ModuleUse : PreorderActionExprStmtVisitor {
         c += it->defined.count(expr.ident);
       if (! c) {
         n_errors++;
-        mo.locfile.locate(expr.loc, "'%s' undefined", expr.ident);
+        mo.locfile.error(expr.loc, "'%s' undefined", expr.ident);
       }
     }
   }
@@ -85,19 +100,35 @@ struct ModuleUse : PreorderActionExprStmtVisitor {
     if (expr.qualified) {
       if (! mo.qualified_import.count(expr.qualified)) {
         n_errors++;
-        mo.locfile.locate(expr.loc, "Unknown module '%s'", expr.qualified);
-      } else if (! mo.qualified_import[expr.qualified]->defined.count(expr.ident)) {
-        n_errors++;
-        mo.locfile.locate(expr.loc, "'%s::%s' undefined", expr.qualified, expr.ident);
+        mo.locfile.error(expr.loc, "Unknown module '%s'", expr.qualified);
+      } else {
+        auto it = mo.qualified_import[expr.qualified]->defined.find(expr.ident);
+        if (it == mo.qualified_import[expr.qualified]->defined.end()) {
+          n_errors++;
+          mo.locfile.error(expr.loc, "'%s::%s' undefined", expr.qualified, expr.ident);
+        } else
+          depended_by[it->second].push_back(define_stmt);
       }
     } else {
-      long c = mo.defined.count(expr.ident);
-      for (auto& it: mo.unqualified_import)
-        c += it->defined.count(expr.ident);
-      if (! c) {
-        n_errors++;
-        mo.locfile.locate(expr.loc, "'%s' undefined", expr.ident);
+      auto it = mo.defined.find(expr.ident);
+      bool found = it != mo.defined.end();
+      for (auto& import: mo.unqualified_import) {
+        auto it2 = import->defined.find(expr.ident);
+        if (it2 != import->defined.end()) {
+          if (found) {
+            n_errors++;
+            mo.locfile.error(expr.loc, "'%s' redefined in unqualified import '%s'", expr.ident, import->filename.c_str());
+          } else {
+            it = it2;
+            found = true;
+          }
+        }
       }
+      if (! found) {
+        n_errors++;
+        mo.locfile.error(expr.loc, "'%s' undefined", expr.ident);
+      } else
+        depended_by[it->second].push_back(define_stmt);
     }
   }
   //void visit(PlusExpr& expr) override {
@@ -153,42 +184,111 @@ Module* load_module(long& n_errors, const char* filename)
   return &mo;
 }
 
+static vector<DefineStmt*> topo_define_stmts(long& n_errors)
+{
+  vector<DefineStmt*> topo;
+  vector<DefineStmt*> st;
+  unordered_map<DefineStmt*, i8> vis; // 0: unvisited; 1: in stack: 2: visited
+  function<bool(DefineStmt*)> dfs = [&](DefineStmt* u) {
+    if (vis[u] == 2)
+      return false;
+    if (vis[u] == 1) {
+      u->module->locfile.error(u->loc, "'%s': circular embedding", u->lhs);
+      long i = st.size();
+      while (st[i-1] != u)
+        i--;
+      st.push_back(st[i-1]);
+      for (; i < st.size(); i++) {
+        long line1, col1, _line2, col2;
+        st[i]->module->locfile.locate(st[i]->loc, line1, col1, _line2, col2);
+        fprintf(stderr, YELLOW"  %s" CYAN":%ld:%ld-%ld: " RED"required by %s\n", st[i]->module->locfile.filename.c_str(), line1+1, col1+1, col2, st[i]->lhs);
+        st[i]->module->locfile.context(st[i]->loc);
+      }
+      fputs("\n", stderr);
+      return true;
+    }
+    vis[u] = 1;
+    st.push_back(u);
+    for (auto v: depended_by[u])
+      if (dfs(v))
+        return true;
+    st.pop_back();
+    vis[u] = 2;
+    topo.push_back(u);
+    return false;
+  };
+  for (auto& d: depended_by)
+    if (dfs(d.first)) { // detected cycle
+      n_errors++;
+      return topo;
+    }
+  reverse(ALL(topo));
+  return topo;
+}
+
 long load(const char* filename)
 {
   long n_errors = 0;
   if (! load_module(n_errors, filename))
     return n_errors;
 
-  if (! n_errors)
-    for (auto& it: inode2module) {
-      Module& mo = it.second;
-      ModuleImportDef p{mo, n_errors};
-      for (Stmt* x = mo.toplevel; x; x = x->next)
-        x->accept(p);
-    }
+  DP(1, "Processing import & def");
+  for(;;) {
+    bool done = true;
+    for (auto& it: inode2module)
+      if (! it.second.processed) {
+        done = false;
+        Module& mo = it.second;
+        mo.processed = true;
+        ModuleImportDef p{mo, n_errors};
+        for (Stmt* x = mo.toplevel; x; x = x->next)
+          x->accept(p);
+      }
+    if (done) break;
+  }
+  if (n_errors)
+    return n_errors;
 
-  if (! n_errors)
-    for (auto& it: inode2module) {
-      Module& mo = it.second;
-      ModuleUse p{mo, n_errors};
-      for (Stmt* x = mo.toplevel; x; x = x->next)
-        x->accept(p);
-    }
+  DP(1, "Processing use");
+  for (auto& it: inode2module) {
+    Module& mo = it.second;
+    ModuleUse p{mo, n_errors};
+    for (Stmt* x = mo.toplevel; x; x = x->next)
+      x->accept(p);
+  }
+  if (n_errors)
+    return n_errors;
 
-  if (opt_module_info && ! n_errors)
+  if (opt_module_info)
     for (auto& it: inode2module) {
       Module& mo = it.second;
       print_module_info(mo);
     }
 
-  if (opt_dump_tree && ! n_errors) {
+  if (opt_dump_tree) {
     StmtPrinter p;
     for (auto& it: inode2module) {
       Module& mo = it.second;
+      printf("=== %s\n", mo.filename.c_str());
       for (Stmt* x = mo.toplevel; x; x = x->next)
         x->accept(p);
     }
   }
+
+  DP(1, "Topological sorting");
+  vector<DefineStmt*> topo = topo_define_stmts(n_errors);
+  if (n_errors)
+    return n_errors;
+
+  DP(1, "Compiling DefineStmt");
+  if (1) {
+    //for (auto stmt: topo)
+    //  printf("%s %s\n", stmt->module->filename.c_str(), stmt->lhs);
+    for (auto stmt: topo)
+      compile(stmt);
+  }
+
+  DP(1, "Linking CollapseExpr");
 
   return n_errors;
 }
