@@ -79,7 +79,7 @@ int yylex(YYSTYPE* yylval, YYLTYPE* loc, Stmt*& res, long& errors, const Locatio
 {
   int token = raw_yylex(yylval, loc, *lexer);
   if (token == INVALID_CHARACTER) {
-    FAIL(*loc, yylval->errmsg ? yylval->errmsg : "Invalid character");
+    FAIL(*loc, yylval->errmsg ? yylval->errmsg : "invalid character");
     free(yylval->errmsg);
   }
   return token;
@@ -130,10 +130,11 @@ factor:
   | '.' { $$ = new DotExpr(); $$->loc = yyloc; }
   | bracket { $$ = new BracketExpr($1); }
   | '(' union_expr ')' { $$ = $2; }
-  | factor '>' action { $$ = $1; $1->entering.push_back($3); }
-  | factor '@' action { $$ = $1; $1->finishing.push_back($3); }
-  | factor '%' action { $$ = $1; $1->leaving.push_back($3); }
-  | factor '$' action { $$ = $1; $1->transiting.push_back($3); }
+  | '(' error ')' { $$ = new DotExpr; }
+  | factor '>' action { $$ = $1; $$->entering.push_back($3); }
+  | factor '@' action { $$ = $1; $$->finishing.push_back($3); }
+  | factor '%' action { $$ = $1; $$->leaving.push_back($3); }
+  | factor '$' action { $$ = $1; $$->transiting.push_back($3); }
   | factor '+' { $$ = new PlusExpr($1); }
   | factor '?' { $$ = new QuestionExpr($1); }
   | factor '*' { $$ = new StarExpr($1); }
@@ -154,7 +155,7 @@ bracket_items:
     bracket_items CHAR '-' CHAR {
       $$ = $1;
       if ($2 > $4)
-        FAIL(yyloc, "Negative range in character class");
+        FAIL(yyloc, "negative range in character class");
       else
         FOR(i, $2, $4+1)
           $$->set(i);

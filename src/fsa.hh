@@ -20,7 +20,8 @@ struct Fsa {
   // DFA -> DFA -> DFA
   Fsa difference(const Fsa& rhs, function<void(long, long)> relate) const;
   // DFA -> DFA
-  Fsa minimize(function<void(vector<long>&)> relate) const;
+  Fsa distinguish(function<void(vector<long>&)> relate) const;
   // * -> DFA
   Fsa determinize(function<void(vector<long>&)> relate) const;
+  void remove_dead(function<void(long)> relate);
 };

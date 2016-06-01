@@ -227,11 +227,6 @@ void stmt_free(Stmt* stmt);
 
 //// Visitor implementations
 
-struct ExprPrinter : Visitor<Expr> {
-  void visit(Expr& expr) {
-  }
-};
-
 struct StmtPrinter : Visitor<Action>, Visitor<Expr>, Visitor<Stmt> {
   int depth = 0;
 
@@ -248,6 +243,34 @@ struct StmtPrinter : Visitor<Action>, Visitor<Expr>, Visitor<Stmt> {
   }
 
   void visit(Expr& expr) override {
+    if (expr.entering.size()) {
+      printf("%*s%s\n", 2*depth, "", "@entering");
+      depth++;
+      for (auto a: expr.entering)
+        a->accept(*this);
+      depth--;
+    }
+    if (expr.finishing.size()) {
+      printf("%*s%s\n", 2*depth, "", "@finishing");
+      depth++;
+      for (auto a: expr.finishing)
+        a->accept(*this);
+      depth--;
+    }
+    if (expr.leaving.size()) {
+      printf("%*s%s\n", 2*depth, "", "@entering");
+      depth++;
+      for (auto a: expr.leaving)
+        a->accept(*this);
+      depth--;
+    }
+    if (expr.transiting.size()) {
+      printf("%*s%s\n", 2*depth, "", "@transiting");
+      depth++;
+      for (auto a: expr.transiting)
+        a->accept(*this);
+      depth--;
+    }
     expr.accept(*this);
   }
   void visit(BracketExpr& expr) override {

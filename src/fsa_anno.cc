@@ -65,6 +65,13 @@ void FsaAnno::difference(FsaAnno& rhs) {
     rhs.fsa = rhs.fsa.determinize(relate1);
   fsa = fsa.difference(rhs.fsa, relate);
   assoc = move(new_assoc);
+
+  auto relate2 = [&](long x) {
+    new_assoc.emplace_back(assoc[x]);
+  };
+  fsa.remove_dead(relate2);
+  assoc = move(new_assoc);
+
   deterministic = true;
 }
 
@@ -98,7 +105,7 @@ void FsaAnno::intersect(FsaAnno& rhs) {
       a.insert(a.end(), ALL(rhs.assoc[y]));
     else
       for (long v: rel1[y])
-        a.insert(a.end(), ALL(assoc[v]));
+        a.insert(a.end(), ALL(rhs.assoc[v]));
     sort(ALL(a));
     a.erase(unique(ALL(a)), a.end());
   };
@@ -108,6 +115,13 @@ void FsaAnno::intersect(FsaAnno& rhs) {
     rhs.fsa = rhs.fsa.determinize(relate1);
   fsa = fsa.intersect(rhs.fsa, relate);
   assoc = move(new_assoc);
+
+  auto relate2 = [&](long x) {
+    new_assoc.emplace_back(assoc[x]);
+  };
+  fsa.remove_dead(relate2);
+  assoc = move(new_assoc);
+
   deterministic = true;
 }
 
@@ -122,7 +136,7 @@ void FsaAnno::minimize() {
     sort(ALL(a));
     a.erase(unique(ALL(a)), a.end());
   };
-  fsa = fsa.minimize(relate);
+  fsa = fsa.distinguish(relate);
   assoc = move(new_assoc);
 }
 
