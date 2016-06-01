@@ -71,12 +71,12 @@ Fsa Fsa::difference(const Fsa& rhs, function<void(long, long)> relate) const
     for (; it0 != adj[u0].end(); ++it0) {
       while (it1 != it1e && it1->first < it0->first)
         ++it1;
-      long v1 = it1 != it1e && it1->first == it1e->first ? it1->second : rhs.n(),
+      long v1 = it1 != it1e && it1->first == it0->first ? it1->second : rhs.n(),
            t = (rhs.n()+1) * it0->second + v1;
       auto mit = m.find(t);
       if (mit == m.end()) {
         mit = m.emplace(t, m.size()).first;
-        q.emplace_back(it0->second, it1->second);
+        q.emplace_back(it0->second, v1);
       }
       r.adj[i].emplace_back(it0->first, mit->second);
     }
@@ -156,7 +156,8 @@ Fsa Fsa::determinize(function<void(vector<long>&)> relate) const
   m[q[0]] = 0;
   r.start = 0;
   REP(i, q.size()) {
-    relate(q[i]);
+    vector<long> rel = q[i];
+    relate(rel);
     bool final = false;
     for (long u: q[i]) {
       if (binary_search(ALL(finals), u))
@@ -204,7 +205,7 @@ Fsa Fsa::minimize(function<void(vector<long>&)> relate) const
   REP(i, n())
     sort(ALL(radj[i]));
 
-  vector<long> L(n()), R(n()), B(n()), C(n(), 0), CC(n());
+  vector<long> L(n()), R(n()), B(n()), C(n(), 0), CC(n(), 0);
   vector<bool> mark(n(), false);
   long fx = -1, x = -1, fy = -1, y = -1, j = 0;
   REP(i, n())
@@ -253,16 +254,17 @@ Fsa Fsa::minimize(function<void(vector<long>&)> relate) const
       if ((x = R[x]) == fx) break;
     }
     // for each refinable set
-    for (long fy: bs)
+    for (long fy: bs) {
       if (CC[fy] < C[fy]) {
         long fu = -1, u = -1, cu = 0,
              fv = -1, v = -1, cv = 0;
         for (long i = fy; ; ) {
           if (mark[i]) {
+            mark[i] = false;
             if (u < 0)
               C[fu = i] = 0;
             else
-              R[fu] = i;
+              R[u] = i;
             C[fu]++;
             B[i] = fu;
             L[i] = u;
@@ -271,7 +273,7 @@ Fsa Fsa::minimize(function<void(vector<long>&)> relate) const
             if (v < 0)
               C[fv = i] = 0;
             else
-              R[fv] = i;
+              R[v] = i;
             C[fv]++;
             B[i] = fv;
             L[i] = v;
@@ -281,14 +283,18 @@ Fsa Fsa::minimize(function<void(vector<long>&)> relate) const
         }
         L[fu] = u, R[u] = fu;
         L[fv] = v, R[v] = fv;
-        REP(a, 256) {
-          pair<long, long> t{a, fu != y ? fu : fv};
+        REP(a, 256)
           if (refines.count({a, fy}))
             refines.emplace(a, fu != fy ? fu : fv);
           else
             refines.emplace(a, C[fu] < C[fv] ? fu : fv);
+      } else
+        for (long i = fy; ; ) {
+          mark[i] = false;
+          if ((i = R[i]) == fy) break;
         }
-      }
+      CC[fy] = 0;
+    }
     // clear marks
     for (x = fx; ; ) {
       auto it = lower_bound(ALL(radj[x]), make_pair(a, 0L)),

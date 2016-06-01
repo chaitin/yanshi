@@ -10,8 +10,10 @@ using std::set;
 using std::string;
 using std::vector;
 
+enum ModuleStatus { UNPROCESSED = 0, BAD, GOOD };
+
 struct Module {
-  bool processed = false;
+  ModuleStatus status;
   LocationFile locfile;
   string filename;
   Stmt* toplevel;
@@ -21,6 +23,6 @@ struct Module {
   map<string, string> named_action;
 };
 
-long load(const char* filename);
-Module* load_module(long& n_errors, const char* filename);
+long load(const string& filename);
+Module* load_module(long& n_errors, const string& filename);
 void unload_all();

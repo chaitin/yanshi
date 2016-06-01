@@ -62,7 +62,7 @@ void sorted_insert(vector<T>& a, const T& x)
 {
   a.emplace_back();
   auto it = a.end();
-  for (; a.begin() != it && x < it[-1]; --it)
+  while (a.begin() != --it && x < it[-1])
     *it = it[-1];
   *it = x;
 }

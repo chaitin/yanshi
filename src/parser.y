@@ -33,14 +33,14 @@ int parse(const LocationFile& locfile, Stmt*& res);
 
 %union {
   long integer;
-  char* string;
+  string* str;
   bitset<256>* charset;
   Action* action;
   Expr* expr;
   Stmt* stmt;
   char* errmsg;
 }
-%destructor { free($$); } <string>
+%destructor { delete $$; } <str>
 %destructor { delete $$; } <action>
 %destructor { delete $$; } <expr>
 %destructor { delete $$; } <stmt>
@@ -48,9 +48,9 @@ int parse(const LocationFile& locfile, Stmt*& res);
 
 %token ACTION AS EXPORT IMPORT INVALID_CHARACTER SEMISEMI
 %token <integer> CHAR INTEGER
-%token <string> IDENT
-%token <string> STRING_LITERAL
-%token <string> BRACED_CODE
+%token <str> IDENT
+%token <str> BRACED_CODE
+%token <str> STRING_LITERAL
 
 %nonassoc IDENT
 %nonassoc '.'
@@ -98,11 +98,11 @@ stmt_list:
   | error '\n' stmt_list { $$ = $3; }
 
 stmt:
-    IDENT '=' union_expr { $$ = new DefineStmt(false, $1, $3); $$->loc = yyloc; }
-  | EXPORT IDENT '=' union_expr { $$ = new DefineStmt(true, $2, $4); $$->loc = yyloc; }
-  | IMPORT STRING_LITERAL AS IDENT { $$ = new ImportStmt($2, $4); $$->loc = yyloc; }
-  | IMPORT STRING_LITERAL { $$ = new ImportStmt($2, NULL); $$->loc = yyloc; }
-  | ACTION IDENT BRACED_CODE { $$ = new ActionStmt($2, $3); $$->loc = yyloc; }
+    IDENT '=' union_expr { $$ = new DefineStmt(false, *$1, $3); delete $1; $$->loc = yyloc; }
+  | EXPORT IDENT '=' union_expr { $$ = new DefineStmt(true, *$2, $4); delete $2; $$->loc = yyloc; }
+  | IMPORT STRING_LITERAL AS IDENT { $$ = new ImportStmt(*$2, *$4); delete $2; delete $4; $$->loc = yyloc; }
+  | IMPORT STRING_LITERAL { string t; $$ = new ImportStmt(*$2, t); delete $2; $$->loc = yyloc; }
+  | ACTION IDENT BRACED_CODE { $$ = new ActionStmt(*$2, *$3); delete $2; delete $3; $$->loc = yyloc; }
   /*| error {}*/
 
 union_expr:
@@ -111,7 +111,7 @@ union_expr:
 
 intersect_expr:
     difference_expr { $$ = $1; }
-  | intersect_expr '|' difference_expr { $$ = new IntersectExpr($1, $3); }
+  | intersect_expr '&' difference_expr { $$ = new IntersectExpr($1, $3); }
 
 difference_expr:
     concat_expr { $$ = $1; }
@@ -122,11 +122,11 @@ concat_expr:
   | concat_expr factor { $$ = new ConcatExpr($1, $2); }
 
 factor:
-    IDENT { $$ = new EmbedExpr(NULL, $1); $$->loc = yyloc; }
-  | IDENT SEMISEMI IDENT { $$ = new EmbedExpr($1, $3); $$->loc = yyloc; }
-  | '!' IDENT { $$ = new CollapseExpr(NULL, $2); $$->loc = yyloc; }
-  | '!' IDENT SEMISEMI IDENT { $$ = new CollapseExpr($2, $4); $$->loc = yyloc; }
-  | STRING_LITERAL { $$ = new LiteralExpr($1); $$->loc = yyloc; }
+    IDENT { string t; $$ = new EmbedExpr(t, *$1); delete $1; $$->loc = yyloc; }
+  | IDENT SEMISEMI IDENT { $$ = new EmbedExpr(*$1, *$3); delete $1; delete $3; $$->loc = yyloc; }
+  | '!' IDENT { string t; $$ = new CollapseExpr(t, *$2); delete $2; $$->loc = yyloc; }
+  | '!' IDENT SEMISEMI IDENT { $$ = new CollapseExpr(*$2, *$4); delete $2; delete $4; $$->loc = yyloc; }
+  | STRING_LITERAL { $$ = new LiteralExpr(*$1); delete $1; $$->loc = yyloc; }
   | '.' { $$ = new DotExpr(); $$->loc = yyloc; }
   | bracket { $$ = new BracketExpr($1); }
   | '(' union_expr ')' { $$ = $2; }
@@ -139,8 +139,8 @@ factor:
   | factor '*' { $$ = new StarExpr($1); }
 
 action:
-    IDENT { $$ = new RefAction($1); $$->loc = yyloc; }
-  | BRACED_CODE { $$ = new InlineAction($1); $$->loc = yyloc; }
+    IDENT { $$ = new RefAction(*$1); delete $1; $$->loc = yyloc; }
+  | BRACED_CODE { $$ = new InlineAction(*$1); delete $1; $$->loc = yyloc; }
 
 bracket:
     '[' bracket_items ']' { $$ = $2; }

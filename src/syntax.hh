@@ -2,10 +2,12 @@
 #include "common.hh"
 #include "location.hh"
 
+#include <string.h>
 #include <bitset>
 #include <string>
 #include <vector>
 using std::bitset;
+using std::string;
 using std::vector;
 
 //// Visitor
@@ -88,19 +90,13 @@ struct Action : VisitableBase<Action> {
 };
 
 struct InlineAction : Visitable<Action, InlineAction> {
-  char* code;
-  InlineAction(char* code) : code(code) {}
-  ~InlineAction() {
-    free(code);
-  }
+  string code;
+  InlineAction(string& code) : code(move(code)) {}
 };
 
 struct RefAction : Visitable<Action, RefAction> {
-  char* ident;
-  RefAction(char* ident) : ident(ident) {}
-  ~RefAction() {
-    free(ident);
-  }
+  string ident;
+  RefAction(string& ident) : ident(move(ident)) {}
 };
 
 //// Expr
@@ -117,12 +113,8 @@ struct BracketExpr : Visitable<Expr, BracketExpr> {
 };
 
 struct CollapseExpr : Visitable<Expr, CollapseExpr> {
-  char *qualified, *ident;
-  CollapseExpr(char* qualified, char* ident) : qualified(qualified), ident(ident) {}
-  ~CollapseExpr() {
-    free(qualified); // may be NULL
-    free(ident);
-  }
+  string qualified, ident;
+  CollapseExpr(string& qualified, string& ident) : qualified(move(qualified)), ident(move(ident)) {}
 };
 
 struct ConcatExpr : Visitable<Expr, ConcatExpr> {
@@ -146,13 +138,9 @@ struct DifferenceExpr : Visitable<Expr, DifferenceExpr> {
 struct DotExpr : Visitable<Expr, DotExpr> {};
 
 struct EmbedExpr : Visitable<Expr, EmbedExpr> {
-  char *qualified, *ident;
+  string qualified, ident;
   DefineStmt* define_stmt = NULL; // set by ModuleImportDef
-  EmbedExpr(char* qualified, char* ident) : qualified(qualified), ident(ident) {}
-  ~EmbedExpr() {
-    free(qualified); // may be NULL
-    free(ident);
-  }
+  EmbedExpr(string& qualified, string& ident) : qualified(move(qualified)), ident(move(ident)) {}
 };
 
 struct IntersectExpr : Visitable<Expr, IntersectExpr> {
@@ -165,11 +153,8 @@ struct IntersectExpr : Visitable<Expr, IntersectExpr> {
 };
 
 struct LiteralExpr : Visitable<Expr, LiteralExpr> {
-  char* literal;
-  LiteralExpr(char* literal) : literal(literal) {}
-  ~LiteralExpr() {
-    free(literal);
-  }
+  string literal;
+  LiteralExpr(string& literal) : literal(move(literal)) {}
 };
 
 struct PlusExpr : Visitable<Expr, PlusExpr> {
@@ -217,34 +202,25 @@ struct Stmt {
 struct EmptyStmt : Visitable<Stmt, EmptyStmt> {};
 
 struct ActionStmt : Visitable<Stmt, ActionStmt> {
-  char *ident, *code;
-  ActionStmt(char* ident, char* code) : ident(ident), code(code) {}
-  ~ActionStmt() {
-    free(ident);
-    free(code);
-  }
+  string ident, code;
+  ActionStmt(string& ident, string& code) : ident(move(ident)), code(move(code)) {}
 };
 
 struct Module;
 struct DefineStmt : Visitable<Stmt, DefineStmt> {
   bool export_;
-  char* lhs;
+  string lhs;
   Expr* rhs;
   Module* module; // used in topological sort
-  DefineStmt(bool export_, char* lhs, Expr* rhs) : export_(export_), lhs(lhs), rhs(rhs) {}
+  DefineStmt(bool export_, string& lhs, Expr* rhs) : export_(export_), lhs(move(lhs)), rhs(rhs) {}
   ~DefineStmt() {
-    free(lhs);
     delete rhs;
   }
 };
 
 struct ImportStmt : Visitable<Stmt, ImportStmt> {
-  char *filename, *qualified;
-  ImportStmt(char* filename, char* qualified) : filename(filename), qualified(qualified) {}
-  ~ImportStmt() {
-    free(filename);
-    free(qualified); // may be NULL
-  }
+  string filename, qualified;
+  ImportStmt(string& filename, string& qualified) : filename(move(filename)), qualified(move(qualified)) {}
 };
 
 void stmt_free(Stmt* stmt);
@@ -264,11 +240,11 @@ struct StmtPrinter : Visitor<Action>, Visitor<Expr>, Visitor<Stmt> {
   }
   void visit(InlineAction& action) override {
     printf("%*s%s\n", 2*depth, "", "InlineAction");
-    printf("%*s%s\n", 2*(depth+1), "", action.code);
+    printf("%*s%s\n", 2*(depth+1), "", action.code.c_str());
   }
   void visit(RefAction& action) override {
     printf("%*s%s\n", 2*depth, "", "RefAction");
-    printf("%*s%s\n", 2*(depth+1), "", action.ident);
+    printf("%*s%s\n", 2*(depth+1), "", action.ident.c_str());
   }
 
   void visit(Expr& expr) override {
@@ -290,10 +266,10 @@ struct StmtPrinter : Visitor<Action>, Visitor<Expr>, Visitor<Stmt> {
   void visit(CollapseExpr& expr) override {
     printf("%*s%s\n", 2*depth, "", "CollapseExpr");
     printf("%*s", 2*(depth+1), "");
-    if (expr.qualified)
-      printf("%s.%s\n", expr.qualified, expr.ident);
+    if (expr.qualified.size())
+      printf("%s.%s\n", expr.qualified.c_str(), expr.ident.c_str());
     else
-      printf("%s\n", expr.ident);
+      printf("%s\n", expr.ident.c_str());
   }
   void visit(ConcatExpr& expr) override {
     printf("%*s%s\n", 2*depth, "", "ConcatExpr");
@@ -315,10 +291,10 @@ struct StmtPrinter : Visitor<Action>, Visitor<Expr>, Visitor<Stmt> {
   void visit(EmbedExpr& expr) override {
     printf("%*s%s\n", 2*depth, "", "EmbedExpr");
     printf("%*s", 2*(depth+1), "");
-    if (expr.qualified)
-      printf("%s.%s\n", expr.qualified, expr.ident);
+    if (expr.qualified.size())
+      printf("%s.%s\n", expr.qualified.c_str(), expr.ident.c_str());
     else
-      printf("%s\n", expr.ident);
+      printf("%s\n", expr.ident.c_str());
   }
   void visit(IntersectExpr& expr) override {
     printf("%*s%s\n", 2*depth, "", "IntersectExpr");
@@ -329,10 +305,10 @@ struct StmtPrinter : Visitor<Action>, Visitor<Expr>, Visitor<Stmt> {
   }
   void visit(LiteralExpr& expr) override {
     printf("%*s%s\n", 2*depth, "", "LiteralExpr");
-    printf("%*s%s\n", 2*(depth+1), "", expr.literal);
+    printf("%*s%s\n", 2*(depth+1), "", expr.literal.c_str()); // TODO NUL
   }
   void visit(PlusExpr& expr) override {
-    printf("%*s%s\n", 2*depth, "", "UnionExpr");
+    printf("%*s%s\n", 2*depth, "", "PlusExpr");
     depth++;
     expr.inner->accept(*this);
     depth--;
@@ -362,13 +338,13 @@ struct StmtPrinter : Visitor<Action>, Visitor<Expr>, Visitor<Stmt> {
   }
   void visit(ActionStmt& stmt) override {
     printf("%*s%s\n", 2*depth, "", "ActionStmt");
-    printf("%*s%s\n", 2*(depth+1), "", stmt.ident);
-    printf("%*s%s\n", 2*(depth+1), "", stmt.code);
+    printf("%*s%s\n", 2*(depth+1), "", stmt.ident.c_str());
+    printf("%*s%s\n", 2*(depth+1), "", stmt.code.c_str());
   }
   void visit(DefineStmt& stmt) override {
     printf("%*s%s%s\n", 2*depth, "", "DefineStmt", stmt.export_ ? " export" : "");
     depth++;
-    printf("%*s%s\n", 2*depth, "", stmt.lhs);
+    printf("%*s%s\n", 2*depth, "", stmt.lhs.c_str());
     visit(*stmt.rhs);
     depth--;
   }
@@ -377,9 +353,9 @@ struct StmtPrinter : Visitor<Action>, Visitor<Expr>, Visitor<Stmt> {
   }
   void visit(ImportStmt& stmt) override {
     printf("%*s%s\n", 2*depth, "", "ImportStmt");
-    printf("%*s%s\n", 2*(depth+1), "", stmt.filename);
-    if (stmt.qualified)
-      printf("%*sas %s\n", 2*(depth+1), "", stmt.qualified);
+    printf("%*s%s\n", 2*(depth+1), "", stmt.filename.c_str());
+    if (stmt.qualified.size())
+      printf("%*sas %s\n", 2*(depth+1), "", stmt.qualified.c_str());
   }
 };
 

@@ -62,7 +62,7 @@ IS			(u|U|l|L)*
 "as" return AS;
 "export" return EXPORT;
 "import" return IMPORT;
-{L}({L}|{D})* { yylval->string = strdup(yytext); return IDENT; }
+{L}({L}|{D})* { yylval->str = new string(yytext); return IDENT; }
 
 [0-9]+ { yylval->integer = atol(yytext); return INTEGER; }
 
@@ -102,7 +102,7 @@ IS			(u|U|l|L)*
   "}" {
     yy_pop_state(yyscanner);
     if (my_top_state(yyscanner) == INITIAL) {
-      yylval->string = strdup(tmp_bracket.c_str());
+      yylval->str = new string(tmp_bracket);
       return BRACED_CODE;
     }
   }
@@ -116,7 +116,7 @@ IS			(u|U|l|L)*
   "'" {
     yy_pop_state(yyscanner);
     if (my_top_state(yyscanner) == INITIAL) {
-      yylval->string = strdup(tmp_str.c_str());
+      yylval->str = new string(tmp_str);
       return STRING_LITERAL;
     }
   }
@@ -131,7 +131,7 @@ IS			(u|U|l|L)*
   "\"" {
     yy_pop_state(yyscanner);
     if (my_top_state(yyscanner) == INITIAL) {
-      yylval->string = strdup(tmp_str.c_str());
+      yylval->str = new string(tmp_str);
       return STRING_LITERAL;
     }
   }
