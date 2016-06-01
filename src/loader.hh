@@ -3,15 +3,20 @@
 #include <map>
 #include <set>
 #include <string>
+#include <vector>
+using std::map;
+using std::set;
+using std::string;
+using std::vector;
 
 struct Module {
   LocationFile locfile;
-  std::string filename;
+  string filename;
   Stmt* toplevel;
-  std::set<std::string> defined;
-  std::vector<Module*> unqualified_import;
-  std::map<std::string, Module*> qualified_import;
-  std::map<std::string, std::string> named_action;
+  set<string> defined;
+  vector<Module*> unqualified_import;
+  map<string, Module*> qualified_import;
+  map<string, string> named_action;
 };
 
 long load(const char* filename);

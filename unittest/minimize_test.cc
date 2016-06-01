@@ -30,7 +30,8 @@ int main(int argc, char *argv[])
     unlink(filename);
   }
 
-  Fsa fsa = read_dfa().minimize();
+  auto relate = [](const vector<long>&) {};
+  Fsa fsa = read_dfa().minimize(relate);
   print_fsa(fsa);
 
   if (argc == 1)

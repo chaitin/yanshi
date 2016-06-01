@@ -32,7 +32,8 @@ int main(int argc, char *argv[])
     unlink(filename);
   }
 
-  Fsa fsa = read_nfa().determinize();
+  auto relate = [](const vector<long>&) {};
+  Fsa fsa = read_nfa().determinize(relate);
   print_fsa(fsa);
 
   if (argc == 1)

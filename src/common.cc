@@ -114,6 +114,7 @@ long get_long(const char *arg)
 }
 
 //// log
+//
 
 void log_generic(const char *prefix, const char *format, va_list ap)
 {

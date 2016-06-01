@@ -4,6 +4,8 @@
 #include <bitset>
 #include <string>
 #include <vector>
+using std::bitset;
+using std::vector;
 
 //// Visitor
 
@@ -34,29 +36,29 @@ struct Visitor<Action> {
 
 struct Expr;
 struct BracketExpr;
-struct ClosureExpr;
 struct CollapseExpr;
 struct ConcatExpr;
 struct DifferenceExpr;
 struct DotExpr;
 struct EmbedExpr;
 struct LiteralExpr;
-struct MaybeExpr;
 struct PlusExpr;
+struct QuestionExpr;
+struct StarExpr;
 struct UnionExpr;
 template<>
 struct Visitor<Expr> {
   virtual void visit(Expr&) = 0;
   virtual void visit(BracketExpr&) = 0;
-  virtual void visit(ClosureExpr&) = 0;
   virtual void visit(CollapseExpr&) = 0;
   virtual void visit(ConcatExpr&) = 0;
   virtual void visit(DifferenceExpr&) = 0;
   virtual void visit(DotExpr&) = 0;
   virtual void visit(EmbedExpr&) = 0;
   virtual void visit(LiteralExpr&) = 0;
-  virtual void visit(MaybeExpr&) = 0;
   virtual void visit(PlusExpr&) = 0;
+  virtual void visit(QuestionExpr&) = 0;
+  virtual void visit(StarExpr&) = 0;
   virtual void visit(UnionExpr&) = 0;
 };
 
@@ -102,21 +104,13 @@ struct RefAction : Visitable<Action, RefAction> {
 
 struct Expr : VisitableBase<Expr> {
   Location loc;
-  std::vector<Action*> entering, finishing, leaving, transiting;
+  vector<Action*> entering, finishing, leaving, transiting;
   virtual ~Expr() = default;
 };
 
 struct BracketExpr : Visitable<Expr, BracketExpr> {
-  std::bitset<256> charset;
-  BracketExpr(std::bitset<256>* charset) : charset(*charset) { delete charset; }
-};
-
-struct ClosureExpr : Visitable<Expr, ClosureExpr> {
-  Expr* inner;
-  ClosureExpr(Expr* inner) : inner(inner) {}
-  ~ClosureExpr() {
-    delete inner;
-  }
+  bitset<256> charset;
+  BracketExpr(bitset<256>* charset) : charset(*charset) { delete charset; }
 };
 
 struct CollapseExpr : Visitable<Expr, CollapseExpr> {
@@ -165,18 +159,26 @@ struct LiteralExpr : Visitable<Expr, LiteralExpr> {
   }
 };
 
-struct MaybeExpr : Visitable<Expr, MaybeExpr> {
-  Expr* inner;
-  MaybeExpr(Expr* inner) : inner(inner) {}
-  ~MaybeExpr() {
-    delete inner;
-  }
-};
-
 struct PlusExpr : Visitable<Expr, PlusExpr> {
   Expr* inner;
   PlusExpr(Expr* inner) : inner(inner) {}
   ~PlusExpr() {
+    delete inner;
+  }
+};
+
+struct QuestionExpr : Visitable<Expr, QuestionExpr> {
+  Expr* inner;
+  QuestionExpr(Expr* inner) : inner(inner) {}
+  ~QuestionExpr() {
+    delete inner;
+  }
+};
+
+struct StarExpr : Visitable<Expr, StarExpr> {
+  Expr* inner;
+  StarExpr(Expr* inner) : inner(inner) {}
+  ~StarExpr() {
     delete inner;
   }
 };
@@ -270,12 +272,6 @@ struct StmtPrinter : Visitor<Action>, Visitor<Expr>, Visitor<Stmt> {
       }
     puts("");
   }
-  void visit(ClosureExpr& expr) override {
-    printf("%*s%s\n", 2*depth, "", "ClosureExpr");
-    depth++;
-    expr.inner->accept(*this);
-    depth--;
-  }
   void visit(CollapseExpr& expr) override {
     printf("%*s%s\n", 2*depth, "", "CollapseExpr");
     printf("%*s", 2*(depth+1), "");
@@ -313,14 +309,20 @@ struct StmtPrinter : Visitor<Action>, Visitor<Expr>, Visitor<Stmt> {
     printf("%*s%s\n", 2*depth, "", "LiteralExpr");
     printf("%*s%s\n", 2*(depth+1), "", expr.literal);
   }
-  void visit(MaybeExpr& expr) override {
-    printf("%*s%s\n", 2*depth, "", "MaybeExpr");
+  void visit(PlusExpr& expr) override {
+    printf("%*s%s\n", 2*depth, "", "UnionExpr");
     depth++;
     expr.inner->accept(*this);
     depth--;
   }
-  void visit(PlusExpr& expr) override {
-    printf("%*s%s\n", 2*depth, "", "UnionExpr");
+  void visit(QuestionExpr& expr) override {
+    printf("%*s%s\n", 2*depth, "", "QuestionExpr");
+    depth++;
+    expr.inner->accept(*this);
+    depth--;
+  }
+  void visit(StarExpr& expr) override {
+    printf("%*s%s\n", 2*depth, "", "StarExpr");
     depth++;
     expr.inner->accept(*this);
     depth--;
@@ -376,16 +378,19 @@ struct PreorderActionExprStmtVisitor : Visitor<Action>, Visitor<Expr>, Visitor<S
 
   void visit(Expr& expr) override { expr.accept(*this); }
   void visit(BracketExpr& expr) override {}
-  void visit(ClosureExpr& expr) override {}
   void visit(CollapseExpr& expr) override {}
   void visit(ConcatExpr& expr) override {}
   void visit(DifferenceExpr& expr) override {}
   void visit(DotExpr& expr) override {}
   void visit(EmbedExpr& expr) override {}
   void visit(LiteralExpr& expr) override {}
-  void visit(MaybeExpr& expr) override {}
-  void visit(PlusExpr& expr) override {}
-  void visit(UnionExpr& expr) override {}
+  void visit(PlusExpr& expr) override { expr.inner->accept(*this); }
+  void visit(QuestionExpr& expr) override { expr.inner->accept(*this); }
+  void visit(StarExpr& expr) override { expr.inner->accept(*this); }
+  void visit(UnionExpr& expr) override {
+    expr.lhs->accept(*this);
+    expr.rhs->accept(*this);
+  }
 
   void visit(Stmt& stmt) override { stmt.accept(*this); }
   void visit(ActionStmt& stmt) override {}

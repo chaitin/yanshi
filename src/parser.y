@@ -130,9 +130,9 @@ factor:
   | factor '@' action { $$ = $1; $1->finishing.push_back($3); }
   | factor '%' action { $$ = $1; $1->leaving.push_back($3); }
   | factor '$' action { $$ = $1; $1->transiting.push_back($3); }
-  | factor '?' { $$ = new MaybeExpr($1); }
-  | factor '*' { $$ = new ClosureExpr($1); }
   | factor '+' { $$ = new PlusExpr($1); }
+  | factor '?' { $$ = new QuestionExpr($1); }
+  | factor '*' { $$ = new StarExpr($1); }
 
 action:
     IDENT { $$ = new RefAction($1); $$->loc = yyloc; }

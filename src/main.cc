@@ -31,6 +31,8 @@ int main(int argc, char *argv[])
   int opt;
   static struct option long_options[] = {
     {"help",                no_argument,       0,   'h'},
+    {"debug",               required_argument, 0,   'd'},
+    {"debug-output",        required_argument, 0,   'l'},
     {"module-info",         required_argument, 0,   'm'},
     {"output",              required_argument, 0,   'O'},
     {0,                     0,                 0,   0},
@@ -38,9 +40,19 @@ int main(int argc, char *argv[])
 
   char* opt_output_filename = NULL;
 
-  while ((opt = getopt_long(argc, argv, "Dhmo:t", long_options, NULL)) != -1) {
+  while ((opt = getopt_long(argc, argv, "Dd:hl:mo:t", long_options, NULL)) != -1) {
     switch (opt) {
     case 'D':
+      break;
+    case 'd':
+      debug_level = get_long(optarg);
+      break;
+    case 'l':
+      if (debug_file)
+        err_exit(EX_USAGE, "multiple '-l'");
+      debug_file = fopen(optarg, "w");
+      if (! debug_file)
+        err_exit(EX_OSFILE, "fopen");
       break;
     case 'h':
       print_help(stdout);
@@ -59,10 +71,13 @@ int main(int argc, char *argv[])
       break;
     }
   }
+  if (! debug_file)
+    debug_file = stderr;
   argc -= optind;
   argv += optind;
 
   long n_errors = load(argc ? argv[0] : "-");
   unload_all();
+  fclose(debug_file);
   return n_errors ? 2 : 0;
 }

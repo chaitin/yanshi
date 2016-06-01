@@ -37,7 +37,8 @@ int main(int argc, char *argv[])
     unlink(filename);
   }
 
-  Fsa a = read_dfa(), b = read_dfa(), fsa = a | b;
+  auto relate = [](long u, long v) {};
+  Fsa a = read_dfa(), b = read_dfa(), fsa = a.union_(b, relate);
   print_fsa(fsa);
 
   if (argc == 1)

@@ -6,6 +6,8 @@
 #include <stdio.h>
 #include <stdarg.h>
 #include <type_traits>
+#include <vector>
+using std::vector;
 
 #define LEN_OF(x) (sizeof(x)/sizeof(*x))
 #define ALL(x) (x).begin(), (x).end()
@@ -33,3 +35,28 @@ void log_generic(const char *prefix, const char *format, va_list ap);
 void log_event(const char *format, ...);
 void log_action(const char *format, ...);
 void log_status(const char *format, ...);
+
+extern long debug_level;
+extern FILE* debug_file;
+#ifdef DEBUG
+# define DP(level, ...)  do {          \
+    if (level <= debug_level) {        \
+      fprintf(debug_file, "%s:%d:", __FILE__, __LINE__); \
+      fprintf(debug_file, __VA_ARG__); \
+      fprintf(debug_file, "\n");       \
+      fflush(debug_file);              \
+    }                                  \
+  } while (0)
+#else
+# define DP(level, ...)
+#endif
+
+template<class T>
+void sorted_insert(vector<T>& a, const T& x)
+{
+  a.emplace_back();
+  auto it = a.end();
+  for (; a.begin() != it && x < it[-1]; --it)
+    *it = it[-1];
+  *it = x;
+}

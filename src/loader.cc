@@ -62,9 +62,6 @@ struct ModuleUse : PreorderActionExprStmtVisitor {
   ModuleUse(Module& mo, long& n_errors) : mo(mo), n_errors(n_errors) {}
 
   void visit(BracketExpr& expr) override {}
-  void visit(ClosureExpr& expr) override {
-    expr.inner->accept(*this);
-  }
   void visit(CollapseExpr& expr) override {
     if (expr.qualified) {
       if (! mo.qualified_import.count(expr.qualified)) {
@@ -103,16 +100,13 @@ struct ModuleUse : PreorderActionExprStmtVisitor {
       }
     }
   }
-  void visit(MaybeExpr& expr) override {
-    expr.inner->accept(*this);
-  }
-  void visit(PlusExpr& expr) override {
-    expr.inner->accept(*this);
-  }
-  void visit(UnionExpr& expr) override {
-    expr.lhs->accept(*this);
-    expr.rhs->accept(*this);
-  }
+  //void visit(PlusExpr& expr) override {
+  //  expr.inner->accept(*this);
+  //}
+  //void visit(UnionExpr& expr) override {
+  //  expr.lhs->accept(*this);
+  //  expr.rhs->accept(*this);
+  //}
 };
 
 Module* load_module(long& n_errors, const char* filename)

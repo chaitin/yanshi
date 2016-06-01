@@ -1,11 +1,13 @@
 CPPFLAGS := -Isrc -I.
-CXXFLAGS := -g3 -std=c++1y -fsanitize=undefined,address
-SRC := $(wildcard src/*.cc)
+CFLAGS := -g3 -std=c++1y -fsanitize=undefined,address
+CXXFLAGS := $(CFLAGS)
+LDLIBS := $(CFLAGS) -lasan -lubsan
+SRC := $(filter-out src/lexer.cc src/parser.cc, $(wildcard src/*.cc)) src/lexer.cc src/parser.cc
 OBJ := $(addprefix build/,$(subst src/,,$(SRC:.cc=.o)))
 UNITTEST_SRC := $(wildcard unittest/*.cc)
 UNITTEST_EXE := $(subst unittest/,,$(UNITTEST_SRC:.cc=))
 
-all: build/yanshi unittest
+all: build/yanshi # unittest
 
 unittest: $(addprefix build/unittest/,$(UNITTEST_EXE))
 	$(foreach x,$(addprefix build/unittest/,$(UNITTEST_EXE)),$x && ) :
@@ -31,6 +33,10 @@ src/lexer.cc src/lexer.hh: src/lexer.l
 
 src/parser.cc src/parser.hh: src/parser.y src/location.hh src/syntax.hh
 	bison --defines=src/parser.hh -o src/parser.cc $<
+
+build/loader.o: src/parser.hh
+build/parser.o: src/lexer.hh
+build/lexer.o: src/parser.hh
 
 clean:
 	$(RM) -r build

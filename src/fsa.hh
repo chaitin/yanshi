@@ -1,8 +1,10 @@
 #pragma once
+#include <functional>
 #include <utility>
 #include <vector>
-using std::vector;
+using std::function;
 using std::pair;
+using std::vector;
 
 struct Fsa {
   long start;
@@ -12,16 +14,13 @@ struct Fsa {
   long n() const { return adj.size(); }
   bool is_final(long x) const;
   void epsilon_closure(vector<long>& src) const;
-  // DFA -> DFA
   Fsa operator~() const;
   // DFA -> DFA -> DFA
-  Fsa operator&(const Fsa& rhs) const;
-  // * -> * -> DFA
-  Fsa operator|(const Fsa& rhs) const;
+  Fsa intersect(const Fsa& rhs, function<void(long, long)> relate) const;
   // DFA -> DFA -> DFA
-  Fsa operator-(const Fsa& rhs) const;
+  Fsa difference(const Fsa& rhs, function<void(long, long)> relate) const;
   // DFA -> DFA
-  Fsa minimize() const;
+  Fsa minimize(function<void(vector<long>&)> relate) const;
   // * -> DFA
-  Fsa determinize() const;
+  Fsa determinize(function<void(vector<long>&)> relate) const;
 };
