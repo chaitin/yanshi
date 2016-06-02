@@ -2,11 +2,12 @@
 
 #include <errno.h>
 #include <execinfo.h>
+#include <stdlib.h>
 #include <string.h>
 #include <sys/time.h>
-#include <time.h>
 #include <sysexits.h>
-#include <stdlib.h>
+#include <time.h>
+#include <unistd.h>
 
 ///// Error
 
@@ -147,3 +148,11 @@ void log_status(const char *format, ...)
   log_generic(YELLOW, format, ap);
   va_end(ap);
 }
+
+void blue() { if (isatty(2)) fputs(BLUE, stderr); }
+void cyan() { if (isatty(2)) fputs(CYAN, stderr); }
+void green() { if (isatty(2)) fputs(GREEN, stderr); }
+void magenta() { if (isatty(2)) fputs(MAGENTA, stderr); }
+void red() { if (isatty(2)) fputs(RED, stderr); }
+void sgr0() { if (isatty(2)) fputs(SGR0, stderr); }
+void yellow() { if (isatty(2)) fputs(YELLOW, stderr); }

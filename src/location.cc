@@ -21,17 +21,19 @@ void LocationFile::context(const Location& loc) const
   long line1, col1, line2, col2;
   locate(loc, line1, col1, line2, col2);
   if (line1 == line2) {
+    fputs("  ", stderr);
     FOR(i, linemap[line1], line1+1 < linemap.size() ? linemap[line1+1] : data.size()) {
       if (i == loc.start)
-        fputs(MAGENTA, stderr);
+        magenta();
       fputc(data[i], stderr);
       if (i+1 == loc.end)
-        fputs(SGR0, stderr);
+        sgr0();
     }
   } else {
+    // TODO
     FOR(i, linemap[line1], linemap[line1+1]) {
       if (i == loc.start)
-        fputs(MAGENTA, stderr);
+        magenta();
       fputc(data[i], stderr);
     }
     if (line2-line1 < 8) {
@@ -47,9 +49,8 @@ void LocationFile::context(const Location& loc) const
     FOR(i, linemap[line2], line2+1 < linemap.size() ? linemap[line2+1] : data.size()) {
       fputc(data[i], stderr);
       if (i+1 == loc.end)
-        fputs(SGR0, stderr);
+        sgr0();
     }
-    fputs(SGR0, stderr);
   }
 }
 
@@ -67,12 +68,16 @@ void LocationFile::error(const Location& loc, const char* fmt, ...) const
   va_start(va, fmt);
   long line1, col1, line2, col2;
   locate(loc, line1, col1, line2, col2);
+  yellow();
+  fprintf(stderr, "%s ", filename.c_str());
+  cyan();
   if (line1 == line2)
-    fprintf(stderr, YELLOW "%s" CYAN ":%ld:%ld-%ld: " RED, filename.c_str(), line1+1, col1+1, col2);
+    fprintf(stderr, "%ld:%ld-%ld ", line1+1, col1+1, col2);
   else
-    fprintf(stderr, YELLOW "%s" CYAN ":%ld-%ld:%ld-%ld: " RED, filename.c_str(), line1+1, line2+1, col1+1, col2);
+    fprintf(stderr, "%ld-%ld:%ld-%ld ", line1+1, line2+1, col1+1, col2);
+  red();
   vfprintf(stderr, fmt, va);
-  fputs(SGR0 "\n", stderr);
-  context(loc);
+  fputs("\n", stderr);
+  sgr0();
   va_end(va);
 }

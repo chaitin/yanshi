@@ -365,7 +365,7 @@ void Fsa::remove_dead(function<void(long)> relate)
         q.push_back(e.second);
       }
   }
-  id[start] = true;
+  id[start] = 1;
 
   long j = 0;
   REP(i, n())

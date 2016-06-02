@@ -101,8 +101,10 @@ struct RefAction : Visitable<Action, RefAction> {
 
 //// Expr
 
+struct LCA;
 struct Expr : VisitableBase<Expr> {
   Location loc;
+  LCA* lca;
   vector<Action*> entering, finishing, leaving, transiting;
   virtual ~Expr() = default;
 };

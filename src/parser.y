@@ -72,7 +72,7 @@ int parse(const LocationFile& locfile, Stmt*& res);
 void yyerror(YYLTYPE* loc, Stmt*& res, long& errors, const LocationFile& locfile, yyscan_t* lexer, const char *errmsg)
 {
   errors++;
-  locfile.error(*loc, "%s", errmsg);
+  locfile.error_context(*loc, "%s", errmsg);
 }
 
 int yylex(YYSTYPE* yylval, YYLTYPE* loc, Stmt*& res, long& errors, const LocationFile& locfile, yyscan_t* lexer)

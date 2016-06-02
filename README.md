@@ -16,3 +16,7 @@ strict  merge by size
 `x*` lazy，
 `x+` 
 `xy` lazy
+
+## 编辑器支持
+
+### Vim

@@ -194,16 +194,18 @@ static vector<DefineStmt*> topo_define_stmts(long& n_errors)
     if (vis[u] == 2)
       return false;
     if (vis[u] == 1) {
-      u->module->locfile.error(u->loc, "'%s': circular embedding", u->lhs.c_str());
+      u->module->locfile.error_context(u->loc, "'%s': circular embedding", u->lhs.c_str());
       long i = st.size();
       while (st[i-1] != u)
         i--;
       st.push_back(st[i-1]);
       for (; i < st.size(); i++) {
-        long line1, col1, _line2, col2;
-        st[i]->module->locfile.locate(st[i]->loc, line1, col1, _line2, col2);
-        fprintf(stderr, YELLOW"  %s" CYAN":%ld:%ld-%ld: " RED"required by %s\n", st[i]->module->locfile.filename.c_str(), line1+1, col1+1, col2, st[i]->lhs.c_str());
-        st[i]->module->locfile.context(st[i]->loc);
+        //long line1, col1, _line2, col2;
+        //st[i]->module->locfile.locate(st[i]->loc, line1, col1, _line2, col2);
+        fputs("  ", stderr);
+        st[i]->module->locfile.error_context(st[i]->loc, "required by %s", st[i]->lhs.c_str());
+        //fprintf(stderr, YELLOW"  %s" CYAN":%ld:%ld-%ld: " RED"required by %s\n", st[i]->module->locfile.filename.c_str(), line1+1, col1+1, col2, st[i]->lhs.c_str());
+        //st[i]->module->locfile.context(st[i]->loc);
       }
       fputs("\n", stderr);
       return true;

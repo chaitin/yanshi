@@ -29,6 +29,14 @@ typedef int64_t i64;
 #define MAGENTA "\x1b[1;35m"
 #define CYAN "\x1b[36m"
 
+void blue();
+void cyan();
+void green();
+void magenta();
+void red();
+void sgr0();
+void yellow();
+
 const size_t BUF_SIZE = 512;
 
 void output_error(bool use_err, const char *format, va_list ap);
