@@ -301,15 +301,15 @@ struct StmtPrinter : Visitor<Action>, Visitor<Expr>, Visitor<Stmt> {
   void visit(ConcatExpr& expr) override {
     printf("%*s%s\n", 2*depth, "", "ConcatExpr");
     depth++;
-    expr.lhs->accept(*this);
-    expr.rhs->accept(*this);
+    visit(*expr.lhs);
+    visit(*expr.rhs);
     depth--;
   }
   void visit(DifferenceExpr& expr) override {
     printf("%*s%s\n", 2*depth, "", "DifferenceExpr");
     depth++;
-    expr.lhs->accept(*this);
-    expr.rhs->accept(*this);
+    visit(*expr.lhs);
+    visit(*expr.rhs);
     depth--;
   }
   void visit(DotExpr& expr) override {
@@ -326,8 +326,8 @@ struct StmtPrinter : Visitor<Action>, Visitor<Expr>, Visitor<Stmt> {
   void visit(IntersectExpr& expr) override {
     printf("%*s%s\n", 2*depth, "", "IntersectExpr");
     depth++;
-    expr.lhs->accept(*this);
-    expr.rhs->accept(*this);
+    visit(*expr.lhs);
+    visit(*expr.rhs);
     depth--;
   }
   void visit(LiteralExpr& expr) override {
@@ -337,26 +337,26 @@ struct StmtPrinter : Visitor<Action>, Visitor<Expr>, Visitor<Stmt> {
   void visit(PlusExpr& expr) override {
     printf("%*s%s\n", 2*depth, "", "PlusExpr");
     depth++;
-    expr.inner->accept(*this);
+    visit(*expr.inner);
     depth--;
   }
   void visit(QuestionExpr& expr) override {
     printf("%*s%s\n", 2*depth, "", "QuestionExpr");
     depth++;
-    expr.inner->accept(*this);
+    visit(*expr.inner);
     depth--;
   }
   void visit(StarExpr& expr) override {
     printf("%*s%s\n", 2*depth, "", "StarExpr");
     depth++;
-    expr.inner->accept(*this);
+    visit(*expr.inner);
     depth--;
   }
   void visit(UnionExpr& expr) override {
     printf("%*s%s\n", 2*depth, "", "UnionExpr");
     depth++;
-    expr.lhs->accept(*this);
-    expr.rhs->accept(*this);
+    visit(*expr.lhs);
+    visit(*expr.rhs);
     depth--;
   }
 
@@ -396,38 +396,57 @@ struct PreorderStmtVisitor : Visitor<Stmt> {
   void visit(ImportStmt& stmt) override {}
 };
 
-struct PreorderActionExprStmtVisitor : Visitor<Action>, Visitor<Expr>, Visitor<Stmt> {
-  void visit(Action& expr) override { expr.accept(*this); }
+struct PrePostActionExprStmtVisitor : Visitor<Action>, Visitor<Expr>, Visitor<Stmt> {
+  virtual void pre_action(Action&) {}
+  virtual void post_action(Action&) {}
+  virtual void pre_expr(Expr&) {}
+  virtual void post_expr(Expr&) {}
+  virtual void pre_stmt(Stmt&) {}
+  virtual void post_stmt(Stmt&) {}
+
+  void visit(Action& action) override {
+    pre_action(action);
+    action.accept(*this);
+    post_action(action);
+  }
   void visit(InlineAction&) override {}
   void visit(RefAction&) override {}
 
-  void visit(Expr& expr) override { expr.accept(*this); }
+  void visit(Expr& expr) override {
+    pre_expr(expr);
+    expr.accept(*this);
+    post_expr(expr);
+  }
   void visit(BracketExpr& expr) override {}
   void visit(CollapseExpr& expr) override {}
   void visit(ConcatExpr& expr) override {
-    expr.lhs->accept(*this);
-    expr.rhs->accept(*this);
+    visit(*expr.lhs);
+    visit(*expr.rhs);
   }
   void visit(DifferenceExpr& expr) override {
-    expr.lhs->accept(*this);
-    expr.rhs->accept(*this);
+    visit(*expr.lhs);
+    visit(*expr.rhs);
   }
   void visit(DotExpr& expr) override {}
   void visit(EmbedExpr& expr) override {}
   void visit(IntersectExpr& expr) override {
-    expr.lhs->accept(*this);
-    expr.rhs->accept(*this);
+    visit(*expr.lhs);
+    visit(*expr.rhs);
   }
   void visit(LiteralExpr& expr) override {}
-  void visit(PlusExpr& expr) override { expr.inner->accept(*this); }
-  void visit(QuestionExpr& expr) override { expr.inner->accept(*this); }
-  void visit(StarExpr& expr) override { expr.inner->accept(*this); }
+  void visit(PlusExpr& expr) override { visit(*expr.inner); }
+  void visit(QuestionExpr& expr) override { visit(*expr.inner); }
+  void visit(StarExpr& expr) override { visit(*expr.inner); }
   void visit(UnionExpr& expr) override {
-    expr.lhs->accept(*this);
-    expr.rhs->accept(*this);
+    visit(*expr.lhs);
+    visit(*expr.rhs);
   }
 
-  void visit(Stmt& stmt) override { stmt.accept(*this); }
+  void visit(Stmt& stmt) override {
+    pre_stmt(stmt);
+    stmt.accept(*this);
+    post_stmt(stmt);
+  }
   void visit(ActionStmt& stmt) override {}
   void visit(DefineStmt& stmt) override { stmt.rhs->accept(*this); }
   void visit(EmptyStmt& stmt) override {}

@@ -371,7 +371,12 @@ void Fsa::remove_dead(function<void(long)> relate)
         q.push_back(e.second);
       }
   }
-  id[start] = 1;
+  if (! id[start]) {
+    start = 0;
+    finals.clear();
+    adj.assign(1, {});
+    return;
+  }
 
   long j = 0;
   REP(i, n())

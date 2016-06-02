@@ -67,11 +67,16 @@ struct ModuleImportDef : PreorderStmtVisitor {
   }
 };
 
-struct ModuleUse : PreorderActionExprStmtVisitor {
+struct ModuleUse : PrePostActionExprStmtVisitor {
   Module& mo;
   long& n_errors;
   DefineStmt* define_stmt = NULL;
   ModuleUse(Module& mo, long& n_errors) : mo(mo), n_errors(n_errors) {}
+
+  void post_expr(Expr& expr) override {
+    for (Action* a: expr.finishing)
+      PrePostActionExprStmtVisitor::visit(*a);
+  }
 
   void visit(RefAction& action) override {
     if (action.qualified.size()) {
@@ -147,7 +152,7 @@ struct ModuleUse : PreorderActionExprStmtVisitor {
   }
   void visit(DefineStmt& stmt) override {
     define_stmt = &stmt;
-    stmt.rhs->accept(*this);
+    PrePostActionExprStmtVisitor::visit(*stmt.rhs);
     define_stmt = NULL;
   }
   void visit(EmbedExpr& expr) override {

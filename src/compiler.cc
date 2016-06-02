@@ -67,98 +67,78 @@ struct Compiler : Visitor<Expr> {
   stack<Expr*> path;
   long tick = 0;
 
-  void pre(Expr& expr) {
+  void pre_expr(Expr& expr) {
     expr.pre = tick++;
     expr.depth = path.size();
     if (path.size()) {
-      expr.anc.assign(1, &expr);
+      expr.anc.assign(1, path.top());
       for (long k = 1; 1L << k <= expr.depth; k++)
         expr.anc.push_back(expr.anc[k-1]->anc[k-1]);
     } else
       expr.anc.assign(1, nullptr);
     path.push(&expr);
   }
-  void post(Expr& expr) {
+  void post_expr(Expr& expr) {
     path.pop();
     expr.post = tick;
   }
 
-  void visit(Expr& expr) override { expr.accept(*this); }
+  void visit(Expr& expr) override {
+    pre_expr(expr);
+    expr.accept(*this);
+    post_expr(expr);
+  }
   void visit(BracketExpr& expr) override {
-    pre(expr);
     st.push(FsaAnno::bracket(expr));
-    post(expr);
   }
   void visit(CollapseExpr& expr) override {
-    pre(expr);
     st.push(FsaAnno::collapse(expr));
-    post(expr);
   }
   void visit(ConcatExpr& expr) override {
-    pre(expr);
-    expr.rhs->accept(*this);
+    visit(*expr.rhs);
     FsaAnno rhs = move(st.top());
-    expr.lhs->accept(*this);
+    visit(*expr.lhs);
     path.pop();
     st.top().concat(rhs);
-    post(expr);
   }
   void visit(DifferenceExpr& expr) override {
-    pre(expr);
-    expr.rhs->accept(*this);
+    visit(*expr.rhs);
     FsaAnno rhs = move(st.top());
-    expr.lhs->accept(*this);
+    visit(*expr.lhs);
     st.top().difference(rhs);
-    post(expr);
   }
   void visit(DotExpr& expr) override {
-    pre(expr);
     st.push(FsaAnno::dot(expr));
-    post(expr);
   }
   void visit(EmbedExpr& expr) override {
-    pre(expr);
     st.push(compiled[expr.define_stmt]);
-    post(expr);
   }
   void visit(IntersectExpr& expr) override {
-    pre(expr);
-    expr.rhs->accept(*this);
+    visit(*expr.rhs);
     FsaAnno rhs = move(st.top());
-    expr.lhs->accept(*this);
+    visit(*expr.lhs);
     st.top().intersect(rhs);
-    post(expr);
   }
   void visit(LiteralExpr& expr) override {
-    pre(expr);
     st.push(FsaAnno::literal(expr));
-    post(expr);
   }
   void visit(PlusExpr& expr) override {
-    pre(expr);
-    expr.inner->accept(*this);
+    visit(*expr.inner);
     st.top().plus();
-    post(expr);
   }
   void visit(QuestionExpr& expr) override {
-    pre(expr);
-    expr.inner->accept(*this);
+    visit(*expr.inner);
     st.top().question(expr);
-    post(expr);
   }
   void visit(StarExpr& expr) override {
-    pre(expr);
-    expr.inner->accept(*this);
+    visit(*expr.inner);
     st.top().star(expr);
-    post(expr);
   }
   void visit(UnionExpr& expr) override {
-    pre(expr);
-    expr.rhs->accept(*this);
+    visit(*expr.rhs);
     FsaAnno rhs = move(st.top());
-    expr.lhs->accept(*this);
+    visit(*expr.lhs);
     st.top().union_(rhs, expr);
-    post(expr);
   }
 };
 
@@ -168,7 +148,7 @@ void compile(DefineStmt* stmt)
     return;
   FsaAnno& anno = compiled[stmt];
   Compiler comp;
-  stmt->rhs->accept(comp);
+  comp.visit(*stmt->rhs);
   anno = move(comp.st.top());
 }
 
@@ -268,6 +248,10 @@ void export_statement(DefineStmt* stmt)
     allo++;
   };
   anno.fsa.remove_dead(relate);
+  if (anno.fsa.finals.empty())
+    anno.assoc.assign(1, {});
+  else
+    anno.assoc.resize(allo);
 
   if (opt_dump_automaton)
     print_automaton(anno.fsa);
