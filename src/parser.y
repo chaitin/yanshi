@@ -47,7 +47,7 @@ int parse(const LocationFile& locfile, Stmt*& res);
 %destructor { delete $$; } <stmt>
 %destructor { delete $$; } <charset>
 
-%token ACTION AS EXPORT IMPORT INVALID_CHARACTER SEMISEMI
+%token ACTION AS CPP EXPORT IMPORT INTACT INVALID_CHARACTER SEMISEMI
 %token <integer> CHAR INTEGER
 %token <str> IDENT
 %token <str> BRACED_CODE
@@ -57,7 +57,7 @@ int parse(const LocationFile& locfile, Stmt*& res);
 %nonassoc '.'
 
 %type <action> action
-%type <stmt> stmt stmt_list
+%type <stmt> define_stmt stmt stmt_list
 %type <expr> concat_expr difference_expr factor intersect_expr union_expr
 %type <charset> bracket bracket_items
 
@@ -99,12 +99,16 @@ stmt_list:
   | error '\n' stmt_list { $$ = $3; }
 
 stmt:
-    IDENT '=' union_expr { $$ = new DefineStmt(false, *$1, $3); delete $1; $$->loc = yyloc; }
-  | EXPORT IDENT '=' union_expr { $$ = new DefineStmt(true, *$2, $4); delete $2; $$->loc = yyloc; }
+    define_stmt { $$ = $1; }
   | IMPORT STRING_LITERAL AS IDENT { $$ = new ImportStmt(*$2, *$4); delete $2; delete $4; $$->loc = yyloc; }
   | IMPORT STRING_LITERAL { string t; $$ = new ImportStmt(*$2, t); delete $2; $$->loc = yyloc; }
   | ACTION IDENT BRACED_CODE { $$ = new ActionStmt(*$2, *$3); delete $2; delete $3; $$->loc = yyloc; }
-  /*| error {}*/
+  | CPP BRACED_CODE { $$ = new CppStmt(*$2); delete $2; $$->loc = yyloc; }
+
+define_stmt:
+    IDENT '=' union_expr { $$ = new DefineStmt(*$1, $3); delete $1; $$->loc = yyloc; }
+  | EXPORT define_stmt { $$ = $2; ((DefineStmt*)$$)->export_ = true; $$->loc = yyloc; }
+  | INTACT define_stmt { $$ = $2; ((DefineStmt*)$$)->intact = true; $$->loc = yyloc; }
 
 union_expr:
     intersect_expr { $$ = $1; }

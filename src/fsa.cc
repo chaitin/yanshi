@@ -52,7 +52,7 @@ void Fsa::epsilon_closure(vector<long>& src) const
   sort(ALL(src));
 }
 
-Fsa Fsa::difference(const Fsa& rhs, function<void(long, long)> relate) const
+Fsa Fsa::difference(const Fsa& rhs, function<void(long)> relate) const
 {
   Fsa r;
   vector<pair<long, long>> q;
@@ -66,7 +66,7 @@ Fsa Fsa::difference(const Fsa& rhs, function<void(long, long)> relate) const
     if (is_final(u0) && ! rhs.is_final(u1))
       r.finals.push_back(i);
     r.adj.emplace_back();
-    relate(u0, u1 == rhs.n() ? -1 : u1);
+    relate(u0);
     vector<pair<long, long>>::const_iterator it0 = adj[u0].begin(), it1, it1e;
     if (u1 == rhs.n())
       it1 = it1e = rhs.adj[0].end();
@@ -151,7 +151,7 @@ Fsa Fsa::operator~() const
   return r;
 }
 
-Fsa Fsa::determinize(function<void(vector<long>&)> relate) const
+Fsa Fsa::determinize(function<void(const vector<long>&)> relate) const
 {
   Fsa r;
   unordered_map<vector<long>, long> m;
@@ -162,8 +162,7 @@ Fsa Fsa::determinize(function<void(vector<long>&)> relate) const
   m[q[0]] = 0;
   r.start = 0;
   REP(i, q.size()) {
-    vector<long> rel = q[i];
-    relate(rel);
+    relate(q[i]);
     bool final = false;
     for (long u: q[i]) {
       if (binary_search(ALL(finals), u))

@@ -2,18 +2,29 @@
 #include "fsa.hh"
 #include "syntax.hh"
 
+enum class ExprTag {
+  start = 1,
+  inner = 2,
+  final = 4,
+};
+
+bool operator<(ExprTag x, ExprTag y);
+bool assoc_has_expr(vector<pair<Expr*, ExprTag>>& as, const Expr* x);
+
 struct FsaAnno {
   bool deterministic;
   Fsa fsa;
-  vector<vector<Expr*> > assoc;
-  void concat(FsaAnno& rhs);
+  vector<vector<pair<Expr*, ExprTag>>> assoc;
+  void add_assoc(Expr& expr);
+  void concat(FsaAnno& rhs, ConcatExpr& expr);
   void determinize();
-  void difference(FsaAnno& rhs);
-  void intersect(FsaAnno& rhs);
+  void difference(FsaAnno& rhs, DifferenceExpr& expr);
+  void intersect(FsaAnno& rhs, IntersectExpr& expr);
   void minimize();
-  void plus();
+  void plus(PlusExpr& expr);
   void question(QuestionExpr& expr);
   void star(StarExpr& expr);
+  void substring_grammar();
   void union_(FsaAnno& rhs, UnionExpr& expr);
   static FsaAnno bracket(BracketExpr& expr);
   static FsaAnno collapse(CollapseExpr& expr);

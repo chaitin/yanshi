@@ -18,6 +18,7 @@ using namespace std;
 
 static map<pair<dev_t, ino_t>, Module> inode2module;
 static unordered_map<DefineStmt*, vector<DefineStmt*>> depended_by; // key ranges over all DefineStmt
+FILE* output;
 
 void print_module_info(Module& mo)
 {
@@ -70,11 +71,21 @@ struct ModuleImportDef : PreorderStmtVisitor {
 struct ModuleUse : PrePostActionExprStmtVisitor {
   Module& mo;
   long& n_errors;
-  DefineStmt* define_stmt = NULL;
+  DefineStmt* stmt = NULL;
   ModuleUse(Module& mo, long& n_errors) : mo(mo), n_errors(n_errors) {}
 
+  void pre_expr(Expr& expr) override {
+    expr.stmt = stmt;
+  }
+
   void post_expr(Expr& expr) override {
+    for (Action* a: expr.entering)
+      PrePostActionExprStmtVisitor::visit(*a);
     for (Action* a: expr.finishing)
+      PrePostActionExprStmtVisitor::visit(*a);
+    for (Action* a: expr.leaving)
+      PrePostActionExprStmtVisitor::visit(*a);
+    for (Action* a: expr.transiting)
       PrePostActionExprStmtVisitor::visit(*a);
   }
 
@@ -151,9 +162,9 @@ struct ModuleUse : PrePostActionExprStmtVisitor {
     }
   }
   void visit(DefineStmt& stmt) override {
-    define_stmt = &stmt;
+    this->stmt = &stmt;
     PrePostActionExprStmtVisitor::visit(*stmt.rhs);
-    define_stmt = NULL;
+    this->stmt = NULL;
   }
   void visit(EmbedExpr& expr) override {
     // almost the same to CollapseExpr except for the dependency
@@ -167,7 +178,7 @@ struct ModuleUse : PrePostActionExprStmtVisitor {
           n_errors++;
           mo.locfile.error(expr.loc, "'%s::%s' undefined", expr.qualified.c_str(), expr.ident.c_str());
         } else {
-          depended_by[it->second].push_back(define_stmt);
+          depended_by[it->second].push_back(stmt);
           expr.define_stmt = it->second;
         }
       }
@@ -190,7 +201,7 @@ struct ModuleUse : PrePostActionExprStmtVisitor {
         n_errors++;
         mo.locfile.error(expr.loc, "'%s' undefined", expr.ident.c_str());
       } else {
-        depended_by[it->second].push_back(define_stmt);
+        depended_by[it->second].push_back(stmt);
         expr.define_stmt = it->second;
       }
     }
@@ -211,8 +222,10 @@ Module* load_module(long& n_errors, const string& filename)
       err_exit(EX_OSFILE, "fstat '%s'", filename.c_str());
     inode = {sb.st_dev, sb.st_ino};
   }
-  if (inode2module.count(inode))
+  if (inode2module.count(inode)) {
+    fclose(file);
     return &inode2module[inode];
+  }
   Module& mo = inode2module[inode];
 
   string module{file != stdin ? filename : "main"};
@@ -227,6 +240,7 @@ Module* load_module(long& n_errors, const string& filename)
     data += string(buf, buf+r);
     if (r < sizeof buf) break;
   }
+  fclose(file);
   if (data.empty() || data.back() != '\n')
     data.push_back('\n');
   LocationFile locfile(filename, data);
@@ -294,7 +308,7 @@ long load(const string& filename)
   long n_errors = 0;
   Module* mo = load_module(n_errors, filename);
   if (! mo) {
-    err_exit(EX_OSFILE, "open", filename.c_str());
+    err_exit(EX_OSFILE, "fopen", filename.c_str());
     return n_errors;
   }
   if (mo->status == BAD)
@@ -330,22 +344,27 @@ long load(const string& filename)
   if (n_errors)
     return n_errors;
 
-  if (opt_dump_module)
+  if (opt_dump_module) {
+    magenta(); printf("=== Module\n"); sgr0();
     for (auto& it: inode2module)
       if (it.second.status == GOOD) {
         Module& mo = it.second;
         print_module_info(mo);
       }
+    puts("");
+  }
 
   if (opt_dump_tree) {
+    magenta(); printf("=== Tree\n"); sgr0();
     StmtPrinter p;
     for (auto& it: inode2module)
       if (it.second.status == GOOD) {
         Module& mo = it.second;
-        printf("=== %s\n", mo.filename.c_str());
+        yellow(); printf("filename: %s\n", mo.filename.c_str()); sgr0();
         for (Stmt* x = mo.toplevel; x; x = x->next)
           x->accept(p);
       }
+    puts("");
   }
 
   DP(1, "Topological sorting");
@@ -353,20 +372,27 @@ long load(const string& filename)
   if (n_errors)
     return n_errors;
 
+  if (opt_check)
+    return 0;
+
   DP(1, "Compiling DefineStmt");
-  if (1) {
-    //for (auto stmt: topo)
-    //  printf("%s %s\n", stmt->module->filename.c_str(), stmt->lhs.c_str());
-    for (auto stmt: topo)
-      compile(stmt);
+  for (auto stmt: topo)
+    compile(stmt);
+
+  output = strcmp(opt_output_filename, "-") ? fopen(opt_output_filename, "w") : stdout;
+  if (! output) {
+    n_errors++;
+    err_exit(EX_OSFILE, "fopen", opt_output_filename);
+    return n_errors;
   }
 
-  DP(1, "Output");
-  for (Stmt* x = mo->toplevel; x; x = x->next)
-    if (auto xx = dynamic_cast<DefineStmt*>(x))
-      if (xx->export_)
-        export_statement(xx);
+  DP(1, "Generating header");
+  generate_header(mo);
 
+  DP(1, "Generating body");
+  generate_body(mo);
+
+  fclose(output);
   return n_errors;
 }
 

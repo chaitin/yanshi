@@ -19,10 +19,11 @@ struct Fsa {
   // DFA -> DFA -> DFA
   Fsa intersect(const Fsa& rhs, function<void(long, long)> relate) const;
   // DFA -> DFA -> DFA
-  Fsa difference(const Fsa& rhs, function<void(long, long)> relate) const;
+  Fsa difference(const Fsa& rhs, function<void(long)> relate) const;
   // DFA -> DFA
   Fsa distinguish(function<void(vector<long>&)> relate) const;
   // * -> DFA
-  Fsa determinize(function<void(vector<long>&)> relate) const;
+  Fsa determinize(function<void(const vector<long>&)> relate) const;
+  // a -> a
   void remove_dead(function<void(long)> relate);
 };

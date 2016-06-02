@@ -36,6 +36,7 @@ void magenta();
 void red();
 void sgr0();
 void yellow();
+void indent(FILE* f, int d);
 
 const size_t BUF_SIZE = 512;
 const long AB = 256;

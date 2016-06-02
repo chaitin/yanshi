@@ -3,14 +3,16 @@ if exists('b:current_syntax')
 endif
 
 syn cluster yanshiCommentGroup contains=yanshiTodo
-syn include @yanshiCcode syntax/c.vim
+syn include @yanshiCcode syntax/cpp.vim
 syn keyword yanshiAction action
-syn keyword yanshiStorageClass export
+syn keyword yanshiStorageClass export intact
 syn keyword yanshiTodo contained TODO FIXME XXX
+syn match yanshiCpp 'c++'
 syn match yanshiActionOperator '[>$@%]'
-syn match yanshiCollapse '!\w\+'
+syn match yanshiCollapse '!\w\+\(::\w\+\)\?'
 syn match yanshiHighOp '[+\*?]'
-syn match yanshiIdent '\w\+'
+syn match yanshiIdent '\w\+\(::\w\+\)\?'
+syn match yanshiCpp display "^c++\s*" skipwhite nextgroup=yanshiBrace
 syn match yanshiImport display "^import\s*" contains=yanshiImported
 syn match yanshiLowOp '[-&|]'
 syn match yanshiSpecial display contained "\\\(x\x\x\|.\|$\)"
@@ -45,6 +47,7 @@ hi def link yanshiCollapse       Constant
 hi def link yanshiAction         Structure
 hi def link yanshiActionOperator Type
 hi def link yanshiBracket        Function
+hi def link yanshiCpp            Structure
 hi def link yanshiComment        Comment
 hi def link yanshiHighOp         Operator
 hi def link yanshiImport         Include

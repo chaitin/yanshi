@@ -156,3 +156,8 @@ void magenta() { if (isatty(2)) fputs(MAGENTA, stderr); }
 void red() { if (isatty(2)) fputs(RED, stderr); }
 void sgr0() { if (isatty(2)) fputs(SGR0, stderr); }
 void yellow() { if (isatty(2)) fputs(YELLOW, stderr); }
+
+void indent(FILE* f, int d)
+{
+  fprintf(f, "%*s", 2*d, "");
+}

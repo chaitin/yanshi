@@ -31,25 +31,30 @@ int main(int argc, char *argv[])
   int opt;
   static struct option long_options[] = {
     {"help",                no_argument,       0,   'h'},
+    {"check",               required_argument, 0,   'c'},
     {"debug",               required_argument, 0,   'd'},
     {"debug-output",        required_argument, 0,   'l'},
-    {"dump-assoc",          no_argument,       0,   1000},
-    {"dump-automaton",      no_argument,       0,   1001},
-    {"dump-module",         no_argument,       0,   1002},
-    {"dump-tree",           no_argument,       0,   1003},
+    {"dump-action",          no_argument,      0,   1000},
+    {"dump-assoc",          no_argument,       0,   1001},
+    {"dump-automaton",      no_argument,       0,   1002},
+    {"dump-module",         no_argument,       0,   1003},
+    {"dump-tree",           no_argument,       0,   1004},
     {"module-info",         required_argument, 0,   'm'},
-    {"output",              required_argument, 0,   'O'},
+    {"substring-grammar",   no_argument,       0,   's'},
+    {"output",              required_argument, 0,   'o'},
     {0,                     0,                 0,   0},
   };
 
-  char* opt_output_filename = NULL;
 #ifdef DEBUG
   opt_dump_assoc = opt_dump_automaton = true;
 #endif
 
-  while ((opt = getopt_long(argc, argv, "Dd:hl:o:t", long_options, NULL)) != -1) {
+  while ((opt = getopt_long(argc, argv, "Dcd:hl:o:s", long_options, NULL)) != -1) {
     switch (opt) {
     case 'D':
+      break;
+    case 'c':
+      opt_check = true;
       break;
     case 'd':
       debug_level = get_long(optarg);
@@ -67,10 +72,14 @@ int main(int argc, char *argv[])
     case 'o':
       opt_output_filename = optarg;
       break;
-    case 1000: opt_dump_assoc = true; break;
-    case 1001: opt_dump_automaton = true; break;
-    case 1002: opt_dump_module = true; break;
-    case 1003: opt_dump_tree = true; break;
+    case 's':
+      opt_substring_grammar = true;
+      break;
+    case 1000: opt_dump_action = true; break;
+    case 1001: opt_dump_assoc = true; break;
+    case 1002: opt_dump_automaton = true; break;
+    case 1003: opt_dump_module = true; break;
+    case 1004: opt_dump_tree = true; break;
     case '?':
       print_help(stderr);
       break;

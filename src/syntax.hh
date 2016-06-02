@@ -69,6 +69,7 @@ struct Visitor<Expr> {
 
 struct Stmt;
 struct ActionStmt;
+struct CppStmt;
 struct DefineStmt;
 struct EmptyStmt;
 struct ImportStmt;
@@ -76,6 +77,7 @@ template<>
 struct Visitor<Stmt> {
   virtual void visit(Stmt&) = 0;
   virtual void visit(ActionStmt&) = 0;
+  virtual void visit(CppStmt&) = 0;
   virtual void visit(DefineStmt&) = 0;
   virtual void visit(EmptyStmt&) = 0;
   virtual void visit(ImportStmt&) = 0;
@@ -108,7 +110,20 @@ struct Expr : VisitableBase<Expr> {
   long pre, post, depth; // set by Compiler
   vector<Expr*> anc; // set by Compiler
   vector<Action*> entering, finishing, leaving, transiting;
-  virtual ~Expr() = default;
+  DefineStmt* stmt = NULL; // set by ModuleImportDef
+  virtual ~Expr() {
+    for (auto a: entering)
+      delete a;
+    for (auto a: finishing)
+      delete a;
+    for (auto a: leaving)
+      delete a;
+    for (auto a: transiting)
+      delete a;
+  }
+  bool no_action() const {
+    return entering.empty() && finishing.empty() && leaving.empty() && transiting.empty();
+  }
 };
 
 struct BracketExpr : Visitable<Expr, BracketExpr> {
@@ -118,7 +133,7 @@ struct BracketExpr : Visitable<Expr, BracketExpr> {
 
 struct CollapseExpr : Visitable<Expr, CollapseExpr> {
   string qualified, ident;
-  DefineStmt* define_stmt = NULL; // set by ModuleImportDef
+  DefineStmt* define_stmt = NULL; // set by ModuleUse
   CollapseExpr(string& qualified, string& ident) : qualified(move(qualified)), ident(move(ident)) {}
 };
 
@@ -144,7 +159,7 @@ struct DotExpr : Visitable<Expr, DotExpr> {};
 
 struct EmbedExpr : Visitable<Expr, EmbedExpr> {
   string qualified, ident;
-  DefineStmt* define_stmt = NULL; // set by ModuleImportDef
+  DefineStmt* define_stmt = NULL; // set by ModuleUse
   EmbedExpr(string& qualified, string& ident) : qualified(move(qualified)), ident(move(ident)) {}
 };
 
@@ -211,12 +226,17 @@ struct ActionStmt : Visitable<Stmt, ActionStmt> {
   ActionStmt(string& ident, string& code) : ident(move(ident)), code(move(code)) {}
 };
 
+struct CppStmt : Visitable<Stmt, CppStmt> {
+  string code;
+  CppStmt(string& code) : code(move(code)) {}
+};
+
 struct DefineStmt : Visitable<Stmt, DefineStmt> {
-  bool export_;
+  bool export_ = false, intact = false;
   string lhs;
   Expr* rhs;
   Module* module; // used in topological sort
-  DefineStmt(bool export_, string& lhs, Expr* rhs) : export_(export_), lhs(move(lhs)), rhs(rhs) {}
+  DefineStmt(string& lhs, Expr* rhs) : lhs(move(lhs)), rhs(rhs) {}
   ~DefineStmt() {
     delete rhs;
   }
@@ -368,6 +388,10 @@ struct StmtPrinter : Visitor<Action>, Visitor<Expr>, Visitor<Stmt> {
     printf("%*s%s\n", 2*(depth+1), "", stmt.ident.c_str());
     printf("%*s%s\n", 2*(depth+1), "", stmt.code.c_str());
   }
+  void visit(CppStmt& stmt) override {
+    printf("%*s%s\n", 2*depth, "", "CppStmt");
+    printf("%*s%s\n", 2*(depth+1), "", stmt.code.c_str());
+  }
   void visit(DefineStmt& stmt) override {
     printf("%*s%s%s\n", 2*depth, "", "DefineStmt", stmt.export_ ? " export" : "");
     depth++;
@@ -391,6 +415,7 @@ struct StmtPrinter : Visitor<Action>, Visitor<Expr>, Visitor<Stmt> {
 struct PreorderStmtVisitor : Visitor<Stmt> {
   void visit(Stmt& stmt) override { stmt.accept(*this); }
   void visit(ActionStmt& stmt) override {}
+  void visit(CppStmt& stmt) override {}
   void visit(DefineStmt& stmt) override {}
   void visit(EmptyStmt& stmt) override {}
   void visit(ImportStmt& stmt) override {}
@@ -448,6 +473,7 @@ struct PrePostActionExprStmtVisitor : Visitor<Action>, Visitor<Expr>, Visitor<St
     post_stmt(stmt);
   }
   void visit(ActionStmt& stmt) override {}
+  void visit(CppStmt& stmt) override {}
   void visit(DefineStmt& stmt) override { stmt.rhs->accept(*this); }
   void visit(EmptyStmt& stmt) override {}
   void visit(ImportStmt& stmt) override {}

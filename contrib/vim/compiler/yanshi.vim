@@ -9,4 +9,4 @@ endif
 CompilerSet errorformat=
       \%C\ \ %.%#,
       \%E%f\ %l%*[^:]:%c%*[-0-9]\ %m,
-CompilerSet makeprg=yanshi\ $*\ %
+CompilerSet makeprg=yanshi\ -c\ $*\ %

@@ -7,7 +7,7 @@ let s:save_cpo = &cpo
 set cpo&vim
 
 fu! SyntaxCheckers_yanshi_yanshi_GetLocList() dict
-  let makeprg = self.makeprgBuild({ 'args': '' })
+  let makeprg = self.makeprgBuild({ 'args': '-c' })
 
   let errorformat =
         \ '%C  %.%#,'   .
