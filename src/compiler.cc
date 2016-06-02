@@ -1,16 +1,14 @@
 #include "compiler.hh"
 #include "fsa_anno.hh"
 
+#include <algorithm>
 #include <map>
+#include <limits.h>
+#include <unordered_map>
 #include <stack>
 using namespace std;
 
 static map<DefineStmt*, FsaAnno> compiled;
-
-struct LCA {
-  long depth;
-  vector<Expr*> anc;
-};
 
 static void print_fsa(const Fsa& fsa)
 {
@@ -33,9 +31,9 @@ struct Compiler : Visitor<Expr> {
   stack<Expr*> path;
 
   void pre(Expr& expr) {
-    expr.lca->depth = path.size();
+    expr.depth = path.size();
     if (path.size())
-      expr.lca->anc.assign(1, &expr);
+      expr.anc.assign(1, &expr);
   }
 
   void visit(Expr& expr) override { expr.accept(*this); }
@@ -132,7 +130,72 @@ void export_statement(DefineStmt* stmt)
 {
   DP(2, "Exporting %s", stmt->lhs.c_str());
   FsaAnno& anno = compiled[stmt];
+
+  DP(3, "Construct automaton with all referenced CollapseExpr's DefineStmt");
+  vector<vector<pair<long, long>>> adj;
+  vector<vector<Expr*>> assoc;
+  vector<vector<DefineStmt*>> cllps;
+  long allo = 0;
+  unordered_map<DefineStmt*, long> stmt2offset;
+  function<void(DefineStmt*)> allocate_collapse = [&](DefineStmt* stmt) {
+    if (stmt2offset.count(stmt))
+      return;
+    DP(4, "Allocate %ld to %s", allo, stmt->lhs.c_str());
+    FsaAnno& anno = compiled[stmt];
+    long old = stmt2offset[stmt] = allo;
+    allo += anno.fsa.n()+1;
+    adj.insert(adj.end(), ALL(anno.fsa.adj));
+    REP(i, anno.fsa.n())
+      for (auto& e: adj[old+i])
+        e.second += old;
+    adj.emplace_back(); // appeared in other automata, this is a vertex corresponding to the completion of 'stmt'
+    assoc.insert(assoc.end(), ALL(anno.assoc));
+    assoc.emplace_back();
+    FOR(i, old, old+anno.fsa.n())
+      if (anno.fsa.has(i-old, AB)) {
+        for (auto a: assoc[i])
+          if (auto e = dynamic_cast<CollapseExpr*>(a)) {
+            DefineStmt* v = e->define_stmt;
+            allocate_collapse(v);
+            // (i@{CollapseExpr,...}, AB, _) -> ({CollapseExpr,...}, epsilon, CollapseExpr.define_stmt.start)
+            sorted_insert(adj[i], make_pair(-1L, stmt2offset[v]+compiled[v].fsa.start));
+          }
+        long j = adj[i].size();
+        while (j && adj[i][j-1].first == AB) {
+          long v = adj[i][--j].second;
+          for (auto a: assoc[v])
+            if (auto e = dynamic_cast<CollapseExpr*>(a)) {
+              DefineStmt* w = e->define_stmt;
+              allocate_collapse(w);
+              // (_, AB, v@{CollapseExpr,...}) -> (CollapseExpr.define_stmt.final, epsilon, v)
+              for (long f: compiled[w].fsa.finals) {
+                long g = stmt2offset[w]+f;
+                sorted_insert(adj[g], make_pair(-1L, v));
+                if (g == i)
+                  j++;
+              }
+            }
+        }
+        // remove (i, AB, _)
+        adj[i].resize(j);
+      }
+  };
+  allocate_collapse(stmt);
+  anno.fsa.adj = move(adj);
+  anno.assoc = move(assoc);
+  anno.deterministic = false;
+
   anno.determinize();
   anno.minimize();
+
+  allo = 0;
+  auto relate = [&](long x) {
+    if (allo != x) {
+      anno.fsa.adj[allo] = move(anno.fsa.adj[x]);
+      anno.assoc[allo] = move(anno.assoc[x]);
+    }
+    allo++;
+  };
+  anno.fsa.remove_dead(relate);
   print_fsa(anno.fsa);
 }

@@ -25,6 +25,12 @@ namespace std
   };
 }
 
+bool Fsa::has(long u, long a) const
+{
+  auto it = lower_bound(ALL(adj[u]), make_pair(a, 0L));
+  return it != adj[u].end() && it->first == a;
+}
+
 bool Fsa::is_final(long x) const
 {
   return binary_search(ALL(finals), x);
@@ -134,7 +140,7 @@ Fsa Fsa::operator~() const
       r.adj[i].emplace_back(e.first, e.second);
     }
   }
-  REP(i, 256)
+  REP(i, AB)
     r.adj[n()].emplace_back(i, n());
   long j = 0;
   REP(i, n()+1)
@@ -234,7 +240,7 @@ Fsa Fsa::distinguish(function<void(vector<long>&)> relate) const
   set<pair<long, long>> refines;
   if (x >= 0 || y >= 0)
     // insert (a, min(finals, non-finals))
-    REP(a, 256)
+    REP(a, AB+1)
       refines.emplace(a, fy < 0 || fx >= 0 && C[fx] < C[fy] ? fx : fy);
   while (refines.size()) {
     long a;
@@ -283,7 +289,7 @@ Fsa Fsa::distinguish(function<void(vector<long>&)> relate) const
         }
         L[fu] = u, R[u] = fu;
         L[fv] = v, R[v] = fv;
-        REP(a, 256)
+        REP(a, AB+1)
           if (refines.count({a, fy}))
             refines.emplace(a, fu != fy ? fu : fv);
           else

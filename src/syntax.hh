@@ -101,21 +101,22 @@ struct RefAction : Visitable<Action, RefAction> {
 
 //// Expr
 
-struct LCA;
 struct Expr : VisitableBase<Expr> {
   Location loc;
-  LCA* lca;
+  long depth; // set by Compiler
+  vector<Expr*> anc; // set by Compiler
   vector<Action*> entering, finishing, leaving, transiting;
   virtual ~Expr() = default;
 };
 
 struct BracketExpr : Visitable<Expr, BracketExpr> {
-  bitset<256> charset;
-  BracketExpr(bitset<256>* charset) : charset(*charset) { delete charset; }
+  bitset<AB> charset;
+  BracketExpr(bitset<AB>* charset) : charset(*charset) { delete charset; }
 };
 
 struct CollapseExpr : Visitable<Expr, CollapseExpr> {
   string qualified, ident;
+  DefineStmt* define_stmt = NULL; // set by ModuleImportDef
   CollapseExpr(string& qualified, string& ident) : qualified(move(qualified)), ident(move(ident)) {}
 };
 

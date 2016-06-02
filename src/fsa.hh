@@ -13,6 +13,7 @@ struct Fsa {
 
   long n() const { return adj.size(); }
   bool is_final(long x) const;
+  bool has(long u, long a) const;
   void epsilon_closure(vector<long>& src) const;
   Fsa operator~() const;
   // DFA -> DFA -> DFA

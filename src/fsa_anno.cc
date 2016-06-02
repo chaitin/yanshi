@@ -65,13 +65,6 @@ void FsaAnno::difference(FsaAnno& rhs) {
     rhs.fsa = rhs.fsa.determinize(relate1);
   fsa = fsa.difference(rhs.fsa, relate);
   assoc = move(new_assoc);
-
-  auto relate2 = [&](long x) {
-    new_assoc.emplace_back(assoc[x]);
-  };
-  fsa.remove_dead(relate2);
-  assoc = move(new_assoc);
-
   deterministic = true;
 }
 
@@ -141,32 +134,16 @@ void FsaAnno::minimize() {
 }
 
 void FsaAnno::union_(FsaAnno& rhs, UnionExpr& expr) {
-  vector<vector<Expr*>> new_assoc;
-  vector<vector<long>> rel0, rel1;
-  //auto relate0 = [&](vector<long>& xs) {
-  //  rel0.emplace_back(move(xs));
-  //};
-  //auto relate1 = [&](vector<long>& xs) {
-  //  rel1.emplace_back(move(xs));
-  //};
-  //auto relate = [&](vector<long>& xs, vector<long>& ys, bool flag) {
-  //  new_assoc.emplace_back();
-  //  vector<Expr*>& a = new_assoc.back();
-  //  for (long x: xs)
-  //    a.insert(a.end(), ALL(assoc[x]));
-  //  for (long y: ys)
-  //    a.insert(a.end(), ALL(assoc[y]));
-  //  sort(ALL(a));
-  //  a.erase(unique(ALL(a)), a.end());
-  //};
-
   long ln = fsa.n(), rn = rhs.fsa.n(), src = ln+rn,
        old_lsrc = fsa.start;
   fsa.start = src;
   for (long f: rhs.fsa.finals)
     fsa.finals.push_back(ln+f);
-  for (auto& es: rhs.fsa.adj)
+  for (auto& es: rhs.fsa.adj) {
+    for (auto& e: es)
+      e.second += ln;
     fsa.adj.emplace_back(move(es));
+  }
   fsa.adj.emplace_back();
   fsa.adj[src].emplace_back(-1, old_lsrc);
   fsa.adj[src].emplace_back(-1, ln+rhs.fsa.start);
@@ -217,7 +194,7 @@ FsaAnno FsaAnno::bracket(BracketExpr& expr) {
   r.fsa.start = 0;
   r.fsa.finals = {1};
   r.fsa.adj.assign(2, {});
-  REP(c, 256)
+  REP(c, AB)
     if (expr.charset[c])
       r.fsa.adj[0].emplace_back(c, 1);
   r.assoc.assign(2, {&expr});
@@ -226,10 +203,13 @@ FsaAnno FsaAnno::bracket(BracketExpr& expr) {
 }
 
 FsaAnno FsaAnno::collapse(CollapseExpr& expr) {
+  // represented by (0, special, 1)
   FsaAnno r;
   r.fsa.start = 0;
-  r.fsa.finals = {0};
-  r.assoc.assign(1, {&expr});
+  r.fsa.finals = {1};
+  r.fsa.adj.assign(2, {});
+  r.fsa.adj[0].emplace_back(AB, 1);
+  r.assoc.assign(2, {&expr});
   r.deterministic = true;
   return r;
 }
@@ -239,7 +219,7 @@ FsaAnno FsaAnno::dot(DotExpr& expr) {
   r.fsa.start = 0;
   r.fsa.finals = {1};
   r.fsa.adj.assign(2, {});
-  REP(c, 256)
+  REP(c, AB)
     r.fsa.adj[0].emplace_back(c, 1);
   r.assoc.assign(2, {&expr});
   r.deterministic = true;

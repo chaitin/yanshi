@@ -1,4 +1,5 @@
 %code requires {
+#include "common.hh"
 #include "location.hh"
 #include "syntax.hh"
 using std::bitset;
@@ -34,7 +35,7 @@ int parse(const LocationFile& locfile, Stmt*& res);
 %union {
   long integer;
   string* str;
-  bitset<256>* charset;
+  bitset<AB>* charset;
   Action* action;
   Expr* expr;
   Stmt* stmt;
@@ -164,7 +165,7 @@ bracket_items:
       $$ = $1;
       $$->set($2);
     }
-  | %empty { $$ = new bitset<256>; }
+  | %empty { $$ = new bitset<AB>; }
 
 %%
 

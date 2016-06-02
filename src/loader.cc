@@ -82,21 +82,38 @@ struct ModuleUse : PreorderActionExprStmtVisitor {
       if (! mo.qualified_import.count(expr.qualified)) {
         n_errors++;
         mo.locfile.error(expr.loc, "Unknown module '%s'", expr.qualified.c_str());
-      } else if (! mo.qualified_import[expr.qualified]->defined.count(expr.ident)) {
-        n_errors++;
-        mo.locfile.error(expr.loc, "'%s::%s' undefined", expr.qualified.c_str(), expr.ident.c_str());
+      } else {
+        auto it = mo.qualified_import[expr.qualified]->defined.find(expr.ident);
+        if (it == mo.qualified_import[expr.qualified]->defined.end()) {
+          n_errors++;
+          mo.locfile.error(expr.loc, "'%s::%s' undefined", expr.qualified.c_str(), expr.ident.c_str());
+        } else
+          expr.define_stmt = it->second;
       }
     } else {
-      long c = mo.defined.count(expr.ident);
-      for (auto& it: mo.unqualified_import)
-        c += it->defined.count(expr.ident);
-      if (! c) {
+      auto it = mo.defined.find(expr.ident);
+      bool found = it != mo.defined.end();
+      for (auto& import: mo.unqualified_import) {
+        auto it2 = import->defined.find(expr.ident);
+        if (it2 != import->defined.end()) {
+          if (found) {
+            n_errors++;
+            mo.locfile.error(expr.loc, "'%s' redefined in unqualified import '%s'", expr.ident.c_str(), import->filename.c_str());
+          } else {
+            it = it2;
+            found = true;
+          }
+        }
+      }
+      if (! found) {
         n_errors++;
         mo.locfile.error(expr.loc, "'%s' undefined", expr.ident.c_str());
-      }
+      } else
+        expr.define_stmt = it->second;
     }
   }
   void visit(EmbedExpr& expr) override {
+    // almost the same to CollapseExpr except for the dependency
     if (expr.qualified.size()) {
       if (! mo.qualified_import.count(expr.qualified)) {
         n_errors++;

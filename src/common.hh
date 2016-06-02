@@ -38,6 +38,7 @@ void sgr0();
 void yellow();
 
 const size_t BUF_SIZE = 512;
+const long AB = 256;
 
 void output_error(bool use_err, const char *format, va_list ap);
 void err_msg(const char *format, ...);
