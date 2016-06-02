@@ -9,7 +9,6 @@ struct FsaAnno {
   void concat(FsaAnno& rhs);
   void determinize();
   void difference(FsaAnno& rhs);
-  void embed(EmbedExpr& expr);
   void intersect(FsaAnno& rhs);
   void minimize();
   void plus();

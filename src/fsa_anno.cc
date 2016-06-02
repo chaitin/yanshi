@@ -68,15 +68,6 @@ void FsaAnno::difference(FsaAnno& rhs) {
   deterministic = true;
 }
 
-void FsaAnno::embed(EmbedExpr& expr) {
-  // TODO
-  fsa.start = 0;
-  fsa.finals = {0};
-  fsa.adj.assign(1, {});
-  assoc.clear();
-  assoc.emplace_back(1, &expr);
-}
-
 void FsaAnno::intersect(FsaAnno& rhs) {
   vector<vector<Expr*>> new_assoc;
   vector<vector<long>> rel0, rel1;

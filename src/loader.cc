@@ -21,14 +21,17 @@ static unordered_map<DefineStmt*, vector<DefineStmt*>> depended_by; // key range
 
 void print_module_info(Module& mo)
 {
-  printf("filename: %s\n", mo.filename.c_str());
-  puts("qualified imports:");
+  yellow(); printf("filename: %s\n", mo.filename.c_str());
+  cyan(); puts("qualified imports:"); sgr0();
   for (auto& x: mo.qualified_import)
     printf("  %s as %s\n", x.second->filename.c_str(), x.first.c_str());
-  puts("unqualified imports:");
+  cyan(); puts("unqualified imports:"); sgr0();
   for (auto& x: mo.unqualified_import)
     printf("  %s\n", x->filename.c_str());
-  puts("defined:");
+  cyan(); puts("defined actions:"); sgr0();
+  for (auto& x: mo.defined_action)
+    printf("  %s\n", x.first.c_str());
+  cyan(); puts("defined:"); sgr0();
   for (auto& x: mo.defined)
     printf("  %s\n", x.first.c_str());
 }
@@ -39,11 +42,11 @@ struct ModuleImportDef : PreorderStmtVisitor {
   ModuleImportDef(Module& mo, long& n_errors) : mo(mo), n_errors(n_errors) {}
 
   void visit(ActionStmt& stmt) override {
-    if (mo.named_action.count(stmt.ident)) {
+    if (mo.defined_action.count(stmt.ident)) {
       n_errors++;
       mo.locfile.error(stmt.loc, "Redefined '%s'", stmt.ident.c_str());
     }
-    mo.named_action[stmt.ident] = stmt.code;
+    mo.defined_action[stmt.ident] = stmt.code;
   }
   void visit(DefineStmt& stmt) override {
     mo.defined.emplace(stmt.lhs, &stmt);
@@ -70,10 +73,40 @@ struct ModuleUse : PreorderActionExprStmtVisitor {
   DefineStmt* define_stmt = NULL;
   ModuleUse(Module& mo, long& n_errors) : mo(mo), n_errors(n_errors) {}
 
-  void visit(DefineStmt& stmt) override {
-    define_stmt = &stmt;
-    stmt.rhs->accept(*this);
-    define_stmt = NULL;
+  void visit(RefAction& action) override {
+    if (action.qualified.size()) {
+      if (! mo.qualified_import.count(action.qualified)) {
+        n_errors++;
+        mo.locfile.error(action.loc, "unknown module '%s'", action.qualified.c_str());
+      } else {
+        auto it = mo.qualified_import[action.qualified]->defined_action.find(action.ident);
+        if (it == mo.qualified_import[action.qualified]->defined_action.end()) {
+          n_errors++;
+          mo.locfile.error(action.loc, "'%s::%s' undefined", action.qualified.c_str(), action.ident.c_str());
+        } else
+          action.define_module = mo.qualified_import[action.qualified];
+      }
+    } else {
+      auto it = mo.defined_action.find(action.ident);
+      Module* module = it != mo.defined_action.end() ? &mo : NULL;
+      for (auto& import: mo.unqualified_import) {
+        auto it2 = import->defined_action.find(action.ident);
+        if (it2 != import->defined_action.end()) {
+          if (module) {
+            n_errors++;
+            mo.locfile.error(action.loc, "'%s' redefined in unqualified import '%s'", action.ident.c_str(), import->filename.c_str());
+          } else {
+            it = it2;
+            module = import;
+          }
+        }
+      }
+      if (! module) {
+        n_errors++;
+        mo.locfile.error(action.loc, "'%s' undefined", action.ident.c_str());
+      } else
+        action.define_module = module;
+    }
   }
 
   void visit(BracketExpr& expr) override {}
@@ -81,7 +114,7 @@ struct ModuleUse : PreorderActionExprStmtVisitor {
     if (expr.qualified.size()) {
       if (! mo.qualified_import.count(expr.qualified)) {
         n_errors++;
-        mo.locfile.error(expr.loc, "Unknown module '%s'", expr.qualified.c_str());
+        mo.locfile.error(expr.loc, "unknown module '%s'", expr.qualified.c_str());
       } else {
         auto it = mo.qualified_import[expr.qualified]->defined.find(expr.ident);
         if (it == mo.qualified_import[expr.qualified]->defined.end()) {
@@ -112,12 +145,17 @@ struct ModuleUse : PreorderActionExprStmtVisitor {
         expr.define_stmt = it->second;
     }
   }
+  void visit(DefineStmt& stmt) override {
+    define_stmt = &stmt;
+    stmt.rhs->accept(*this);
+    define_stmt = NULL;
+  }
   void visit(EmbedExpr& expr) override {
     // almost the same to CollapseExpr except for the dependency
     if (expr.qualified.size()) {
       if (! mo.qualified_import.count(expr.qualified)) {
         n_errors++;
-        mo.locfile.error(expr.loc, "Unknown module '%s'", expr.qualified.c_str());
+        mo.locfile.error(expr.loc, "unknown module '%s'", expr.qualified.c_str());
       } else {
         auto it = mo.qualified_import[expr.qualified]->defined.find(expr.ident);
         if (it == mo.qualified_import[expr.qualified]->defined.end()) {
@@ -287,7 +325,7 @@ long load(const string& filename)
   if (n_errors)
     return n_errors;
 
-  if (opt_module_info)
+  if (opt_dump_module)
     for (auto& it: inode2module)
       if (it.second.status == GOOD) {
         Module& mo = it.second;
@@ -317,8 +355,6 @@ long load(const string& filename)
     for (auto stmt: topo)
       compile(stmt);
   }
-
-  DP(1, "Linking CollapseExpr");
 
   DP(1, "Output");
   for (Stmt* x = mo->toplevel; x; x = x->next)

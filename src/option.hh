@@ -1,2 +1,1 @@
-extern bool opt_module_info;
-extern bool opt_dump_tree;
+extern bool opt_dump_assoc, opt_dump_automaton, opt_dump_module, opt_dump_tree;

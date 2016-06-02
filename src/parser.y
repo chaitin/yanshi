@@ -108,19 +108,19 @@ stmt:
 
 union_expr:
     intersect_expr { $$ = $1; }
-  | union_expr '|' intersect_expr { $$ = new UnionExpr($1, $3); }
+  | union_expr '|' intersect_expr { $$ = new UnionExpr($1, $3); $$->loc = yyloc; }
 
 intersect_expr:
     difference_expr { $$ = $1; }
-  | intersect_expr '&' difference_expr { $$ = new IntersectExpr($1, $3); }
+  | intersect_expr '&' difference_expr { $$ = new IntersectExpr($1, $3); $$->loc = yyloc; }
 
 difference_expr:
     concat_expr { $$ = $1; }
-  | difference_expr '-' concat_expr { $$ = new DifferenceExpr($1, $3); }
+  | difference_expr '-' concat_expr { $$ = new DifferenceExpr($1, $3); $$->loc = yyloc; }
 
 concat_expr:
     factor { $$ = $1; }
-  | concat_expr factor { $$ = new ConcatExpr($1, $2); }
+  | concat_expr factor { $$ = new ConcatExpr($1, $2); $$->loc = yyloc; }
 
 factor:
     IDENT { string t; $$ = new EmbedExpr(t, *$1); delete $1; $$->loc = yyloc; }
@@ -129,19 +129,20 @@ factor:
   | '!' IDENT SEMISEMI IDENT { $$ = new CollapseExpr(*$2, *$4); delete $2; delete $4; $$->loc = yyloc; }
   | STRING_LITERAL { $$ = new LiteralExpr(*$1); delete $1; $$->loc = yyloc; }
   | '.' { $$ = new DotExpr(); $$->loc = yyloc; }
-  | bracket { $$ = new BracketExpr($1); }
+  | bracket { $$ = new BracketExpr($1); $$->loc = yyloc; }
   | '(' union_expr ')' { $$ = $2; }
   | '(' error ')' { $$ = new DotExpr; }
   | factor '>' action { $$ = $1; $$->entering.push_back($3); }
   | factor '@' action { $$ = $1; $$->finishing.push_back($3); }
   | factor '%' action { $$ = $1; $$->leaving.push_back($3); }
   | factor '$' action { $$ = $1; $$->transiting.push_back($3); }
-  | factor '+' { $$ = new PlusExpr($1); }
-  | factor '?' { $$ = new QuestionExpr($1); }
-  | factor '*' { $$ = new StarExpr($1); }
+  | factor '+' { $$ = new PlusExpr($1); $$->loc = yyloc; }
+  | factor '?' { $$ = new QuestionExpr($1); $$->loc = yyloc; }
+  | factor '*' { $$ = new StarExpr($1); $$->loc = yyloc; }
 
 action:
-    IDENT { $$ = new RefAction(*$1); delete $1; $$->loc = yyloc; }
+    IDENT { string t; $$ = new RefAction(t, *$1); delete $1; $$->loc = yyloc; }
+  | IDENT SEMISEMI IDENT { $$ = new RefAction(*$1, *$3); delete $1; delete $3; $$->loc = yyloc; }
   | BRACED_CODE { $$ = new InlineAction(*$1); delete $1; $$->loc = yyloc; }
 
 bracket:

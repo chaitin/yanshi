@@ -3,14 +3,14 @@
 #include "loader.hh"
 #include "option.hh"
 
-#include <stdio.h>
-#include <getopt.h>
 #include <errno.h>
-#include <string.h>
+#include <getopt.h>
 #include <stdarg.h>
-#include <unistd.h>
-#include <sysexits.h>
+#include <stdio.h>
+#include <string.h>
 #include <string>
+#include <sysexits.h>
+#include <unistd.h>
 using namespace std;
 
 void print_help(FILE *fh)
@@ -33,14 +33,21 @@ int main(int argc, char *argv[])
     {"help",                no_argument,       0,   'h'},
     {"debug",               required_argument, 0,   'd'},
     {"debug-output",        required_argument, 0,   'l'},
+    {"dump-assoc",          no_argument,       0,   1000},
+    {"dump-automaton",      no_argument,       0,   1001},
+    {"dump-module",         no_argument,       0,   1002},
+    {"dump-tree",           no_argument,       0,   1003},
     {"module-info",         required_argument, 0,   'm'},
     {"output",              required_argument, 0,   'O'},
     {0,                     0,                 0,   0},
   };
 
   char* opt_output_filename = NULL;
+#ifdef DEBUG
+  opt_dump_assoc = opt_dump_automaton = true;
+#endif
 
-  while ((opt = getopt_long(argc, argv, "Dd:hl:mo:t", long_options, NULL)) != -1) {
+  while ((opt = getopt_long(argc, argv, "Dd:hl:o:t", long_options, NULL)) != -1) {
     switch (opt) {
     case 'D':
       break;
@@ -57,15 +64,13 @@ int main(int argc, char *argv[])
     case 'h':
       print_help(stdout);
       break;
-    case 'm':
-      opt_module_info = true;
-      break;
     case 'o':
       opt_output_filename = optarg;
       break;
-    case 't':
-      opt_dump_tree = true;
-      break;
+    case 1000: opt_dump_assoc = true; break;
+    case 1001: opt_dump_automaton = true; break;
+    case 1002: opt_dump_module = true; break;
+    case 1003: opt_dump_tree = true; break;
     case '?':
       print_help(stderr);
       break;

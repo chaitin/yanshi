@@ -94,16 +94,18 @@ struct InlineAction : Visitable<Action, InlineAction> {
   InlineAction(string& code) : code(move(code)) {}
 };
 
+struct Module;
 struct RefAction : Visitable<Action, RefAction> {
-  string ident;
-  RefAction(string& ident) : ident(move(ident)) {}
+  string qualified, ident;
+  Module* define_module; // set by ModuleUse
+  RefAction(string& qualified, string& ident) : qualified(move(qualified)), ident(move(ident)) {}
 };
 
 //// Expr
 
 struct Expr : VisitableBase<Expr> {
   Location loc;
-  long depth; // set by Compiler
+  long pre, post, depth; // set by Compiler
   vector<Expr*> anc; // set by Compiler
   vector<Action*> entering, finishing, leaving, transiting;
   virtual ~Expr() = default;
@@ -209,7 +211,6 @@ struct ActionStmt : Visitable<Stmt, ActionStmt> {
   ActionStmt(string& ident, string& code) : ident(move(ident)), code(move(code)) {}
 };
 
-struct Module;
 struct DefineStmt : Visitable<Stmt, DefineStmt> {
   bool export_;
   string lhs;

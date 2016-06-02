@@ -20,7 +20,7 @@ struct Module {
   map<string, DefineStmt*> defined;
   vector<Module*> unqualified_import;
   map<string, Module*> qualified_import;
-  map<string, string> named_action;
+  map<string, string> defined_action;
 };
 
 long load(const string& filename);

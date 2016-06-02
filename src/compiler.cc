@@ -1,118 +1,164 @@
 #include "compiler.hh"
 #include "fsa_anno.hh"
+#include "loader.hh"
+#include "option.hh"
 
 #include <algorithm>
-#include <map>
+#include <ctype.h>
 #include <limits.h>
-#include <unordered_map>
+#include <map>
 #include <stack>
+#include <typeinfo>
+#include <unordered_map>
 using namespace std;
 
 static map<DefineStmt*, FsaAnno> compiled;
 
-static void print_fsa(const Fsa& fsa)
+static void print_assoc(const FsaAnno& anno)
 {
-  printf("start: %ld\n", fsa.start);
-  printf("finals:");
+  REP(i, anno.fsa.n()) {
+    printf("%ld:", i);
+    for (auto a: anno.assoc[i]) {
+      const char* name = typeid(*a).name();
+      while (name && isdigit(name[0]))
+        name++;
+      string t = name;
+      t = t.substr(t.size()-4); // suffix 'Expr'
+      printf(" %s(%ld-%ld)", t.c_str(), a->loc.start, a->loc.end);
+    }
+    puts("");
+  }
+}
+
+static void print_automaton(const Fsa& fsa)
+{
+  green(); printf("start: %ld\n", fsa.start);
+  red(); printf("finals:");
   for (long i: fsa.finals)
     printf(" %ld", i);
   puts("");
-  puts("edges:");
+  sgr0(); puts("edges:");
   REP(i, fsa.n()) {
     printf("%ld:", i);
     for (auto& x: fsa.adj[i])
-      printf(" (%ld,%ld)", x.first, x.second);
+      printf(" (" YELLOW"%ld" SGR0",%ld)", x.first, x.second);
     puts("");
   }
+}
+
+Expr* find_lca(Expr* u, Expr* v)
+{
+  if (u->depth > v->depth)
+    swap(u, v);
+  if (u->depth < v->depth)
+    for (long k = 63-__builtin_clzl(v->depth-u->depth); k >= 0; k--)
+      if (u->depth <= v->depth-(1L<<k))
+        v = v->anc[k];
+  if (u == v)
+    return u;
+  for (long k = 63-__builtin_clzl(v->depth); k >= 0; k--)
+    if (u->anc[k] != v->anc[k])
+      u = u->anc[k], v = v->anc[k];
+  return u->anc[0];
 }
 
 struct Compiler : Visitor<Expr> {
   stack<FsaAnno> st;
   stack<Expr*> path;
+  long tick = 0;
 
   void pre(Expr& expr) {
+    expr.pre = tick++;
     expr.depth = path.size();
-    if (path.size())
+    if (path.size()) {
       expr.anc.assign(1, &expr);
+      for (long k = 1; 1L << k <= expr.depth; k++)
+        expr.anc.push_back(expr.anc[k-1]->anc[k-1]);
+    } else
+      expr.anc.assign(1, nullptr);
+    path.push(&expr);
+  }
+  void post(Expr& expr) {
+    path.pop();
+    expr.post = tick;
   }
 
   void visit(Expr& expr) override { expr.accept(*this); }
   void visit(BracketExpr& expr) override {
     pre(expr);
     st.push(FsaAnno::bracket(expr));
+    post(expr);
   }
   void visit(CollapseExpr& expr) override {
     pre(expr);
     st.push(FsaAnno::collapse(expr));
+    post(expr);
   }
   void visit(ConcatExpr& expr) override {
     pre(expr);
-    path.push(&expr);
     expr.rhs->accept(*this);
     FsaAnno rhs = move(st.top());
     expr.lhs->accept(*this);
     path.pop();
     st.top().concat(rhs);
+    post(expr);
   }
   void visit(DifferenceExpr& expr) override {
     pre(expr);
-    path.push(&expr);
     expr.rhs->accept(*this);
     FsaAnno rhs = move(st.top());
     expr.lhs->accept(*this);
-    path.pop();
     st.top().difference(rhs);
+    post(expr);
   }
   void visit(DotExpr& expr) override {
     pre(expr);
     st.push(FsaAnno::dot(expr));
+    post(expr);
   }
   void visit(EmbedExpr& expr) override {
     pre(expr);
     st.push(compiled[expr.define_stmt]);
+    post(expr);
   }
   void visit(IntersectExpr& expr) override {
     pre(expr);
-    path.push(&expr);
     expr.rhs->accept(*this);
     FsaAnno rhs = move(st.top());
     expr.lhs->accept(*this);
-    path.pop();
     st.top().intersect(rhs);
+    post(expr);
   }
   void visit(LiteralExpr& expr) override {
     pre(expr);
     st.push(FsaAnno::literal(expr));
+    post(expr);
   }
   void visit(PlusExpr& expr) override {
     pre(expr);
-    path.push(&expr);
     expr.inner->accept(*this);
-    path.pop();
     st.top().plus();
+    post(expr);
   }
   void visit(QuestionExpr& expr) override {
     pre(expr);
-    path.push(&expr);
     expr.inner->accept(*this);
-    path.pop();
     st.top().question(expr);
+    post(expr);
   }
   void visit(StarExpr& expr) override {
     pre(expr);
-    path.push(&expr);
     expr.inner->accept(*this);
-    path.pop();
     st.top().star(expr);
+    post(expr);
   }
   void visit(UnionExpr& expr) override {
     pre(expr);
-    path.push(&expr);
     expr.rhs->accept(*this);
     FsaAnno rhs = move(st.top());
     expr.lhs->accept(*this);
-    path.pop();
     st.top().union_(rhs, expr);
+    post(expr);
   }
 };
 
@@ -124,6 +170,34 @@ void compile(DefineStmt* stmt)
   Compiler comp;
   stmt->rhs->accept(comp);
   anno = move(comp.st.top());
+}
+
+void compile_actions(FsaAnno& anno)
+{
+  REP(i, anno.fsa.n())
+    sort(ALL(anno.assoc[i]), [](const Expr* x, const Expr* y) {
+      return x->pre < y->pre;
+    });
+  REP(u, anno.fsa.n()) {
+    for (auto& e: anno.fsa.adj[u]) {
+      long v = e.second;
+      if (anno.fsa.is_final(v)) {
+        Expr* last = NULL;
+        for (auto a: anno.assoc[v]) {
+          Expr* stop = last ? find_lca(last, a) : NULL;
+          last = a;
+          for (Expr* x = a; a != stop; a = a->anc[0])
+            for (auto action: x->finishing) {
+              if (auto t = dynamic_cast<InlineAction*>(action)) {
+                printf("%ld %ld %ld %s\n", u, e.first, v, t->code.c_str());
+              } else if (auto t = dynamic_cast<RefAction*>(action)) {
+                printf("%ld %ld %ld %s\n", u, e.first, v, t->define_module->defined_action[t->ident].c_str());
+              }
+            }
+        }
+      }
+    }
+  }
 }
 
 void export_statement(DefineStmt* stmt)
@@ -187,15 +261,19 @@ void export_statement(DefineStmt* stmt)
 
   anno.determinize();
   anno.minimize();
-
   allo = 0;
   auto relate = [&](long x) {
-    if (allo != x) {
-      anno.fsa.adj[allo] = move(anno.fsa.adj[x]);
+    if (allo != x)
       anno.assoc[allo] = move(anno.assoc[x]);
-    }
     allo++;
   };
   anno.fsa.remove_dead(relate);
-  print_fsa(anno.fsa);
+
+  if (opt_dump_automaton)
+    print_automaton(anno.fsa);
+  if (opt_dump_assoc)
+    print_assoc(anno);
+
+  DP(3, "Compiling actions");
+  compile_actions(anno);
 }
