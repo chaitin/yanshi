@@ -44,9 +44,11 @@ struct ConcatExpr;
 struct DifferenceExpr;
 struct DotExpr;
 struct EmbedExpr;
+struct EpsilonExpr;
 struct IntersectExpr;
 struct LiteralExpr;
 struct PlusExpr;
+struct RepeatExpr;
 struct QuestionExpr;
 struct StarExpr;
 struct UnionExpr;
@@ -59,9 +61,11 @@ struct Visitor<Expr> {
   virtual void visit(DifferenceExpr&) = 0;
   virtual void visit(DotExpr&) = 0;
   virtual void visit(EmbedExpr&) = 0;
+  virtual void visit(EpsilonExpr&) = 0;
   virtual void visit(IntersectExpr&) = 0;
   virtual void visit(LiteralExpr&) = 0;
   virtual void visit(PlusExpr&) = 0;
+  virtual void visit(RepeatExpr&) = 0;
   virtual void visit(QuestionExpr&) = 0;
   virtual void visit(StarExpr&) = 0;
   virtual void visit(UnionExpr&) = 0;
@@ -163,6 +167,8 @@ struct EmbedExpr : Visitable<Expr, EmbedExpr> {
   EmbedExpr(string& qualified, string& ident) : qualified(move(qualified)), ident(move(ident)) {}
 };
 
+struct EpsilonExpr : Visitable<Expr, EpsilonExpr> {};
+
 struct IntersectExpr : Visitable<Expr, IntersectExpr> {
   Expr *lhs, *rhs;
   IntersectExpr(Expr* lhs, Expr* rhs) : lhs(lhs), rhs(rhs) {}
@@ -181,6 +187,15 @@ struct PlusExpr : Visitable<Expr, PlusExpr> {
   Expr* inner;
   PlusExpr(Expr* inner) : inner(inner) {}
   ~PlusExpr() {
+    delete inner;
+  }
+};
+
+struct RepeatExpr : Visitable<Expr, RepeatExpr> {
+  Expr* inner;
+  long low, high;
+  RepeatExpr(Expr* inner, long low, long high) : inner(inner), low(low), high(high) {}
+  ~RepeatExpr() {
     delete inner;
   }
 };
@@ -343,6 +358,9 @@ struct StmtPrinter : Visitor<Action>, Visitor<Expr>, Visitor<Stmt> {
     else
       printf("%s\n", expr.ident.c_str());
   }
+  void visit(EpsilonExpr& expr) override {
+    printf("%*s%s\n", 2*depth, "", "EpsilonExpr");
+  }
   void visit(IntersectExpr& expr) override {
     printf("%*s%s\n", 2*depth, "", "IntersectExpr");
     depth++;
@@ -356,6 +374,13 @@ struct StmtPrinter : Visitor<Action>, Visitor<Expr>, Visitor<Stmt> {
   }
   void visit(PlusExpr& expr) override {
     printf("%*s%s\n", 2*depth, "", "PlusExpr");
+    depth++;
+    visit(*expr.inner);
+    depth--;
+  }
+  void visit(RepeatExpr& expr) override {
+    printf("%*s%s\n", 2*depth, "", "RepeatExpr");
+    printf("%*s%ld,%ld\n", 2*(depth+1), "", expr.low, expr.high);
     depth++;
     visit(*expr.inner);
     depth--;
@@ -454,12 +479,14 @@ struct PrePostActionExprStmtVisitor : Visitor<Action>, Visitor<Expr>, Visitor<St
   }
   void visit(DotExpr& expr) override {}
   void visit(EmbedExpr& expr) override {}
+  void visit(EpsilonExpr& expr) override {}
   void visit(IntersectExpr& expr) override {
     visit(*expr.lhs);
     visit(*expr.rhs);
   }
   void visit(LiteralExpr& expr) override {}
   void visit(PlusExpr& expr) override { visit(*expr.inner); }
+  void visit(RepeatExpr& expr) override { visit(*expr.inner); }
   void visit(QuestionExpr& expr) override { visit(*expr.inner); }
   void visit(StarExpr& expr) override { visit(*expr.inner); }
   void visit(UnionExpr& expr) override {

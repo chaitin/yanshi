@@ -237,10 +237,12 @@ Fsa Fsa::distinguish(function<void(vector<long>&)> relate) const
   if (y >= 0)
     L[fy] = y, R[y] = fy;
   set<pair<long, long>> refines;
-  if (x >= 0 || y >= 0)
-    // insert (a, min(finals, non-finals))
+  if (fx >= 0)
     REP(a, AB+1)
-      refines.emplace(a, fy < 0 || fx >= 0 && C[fx] < C[fy] ? fx : fy);
+      refines.emplace(a, fx);
+  if (fy >= 0)
+    REP(a, AB+1)
+      refines.emplace(a, fy);
   while (refines.size()) {
     long a;
     tie(a, fx) = *refines.begin();

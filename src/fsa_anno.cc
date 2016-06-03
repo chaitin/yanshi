@@ -1,6 +1,7 @@
 #include "fsa_anno.hh"
 
 #include <algorithm>
+#include <limits.h>
 #include <utility>
 using namespace std;
 
@@ -37,7 +38,7 @@ void FsaAnno::add_assoc(Expr& expr)
   }
 }
 
-void FsaAnno::concat(FsaAnno& rhs, ConcatExpr& expr) {
+void FsaAnno::concat(FsaAnno& rhs, ConcatExpr* expr) {
   long ln = fsa.n(), rn = rhs.fsa.n();
   for (long f: fsa.finals)
     fsa.adj[f].emplace(fsa.adj[f].begin(), -1, ln+rhs.fsa.start);
@@ -52,7 +53,8 @@ void FsaAnno::concat(FsaAnno& rhs, ConcatExpr& expr) {
   assoc.resize(fsa.n());
   REP(i, rhs.fsa.n())
     assoc[ln+i] = move(rhs.assoc[i]);
-  add_assoc(expr);
+  if (expr)
+    add_assoc(*expr);
   deterministic = false;
 }
 
@@ -84,7 +86,7 @@ void FsaAnno::determinize() {
   deterministic = true;
 }
 
-void FsaAnno::difference(FsaAnno& rhs, DifferenceExpr& expr) {
+void FsaAnno::difference(FsaAnno& rhs, DifferenceExpr* expr) {
   vector<vector<long>> rel0;
   decltype(rhs.assoc) new_assoc;
   auto relate0 = [&](const vector<long>& xs) {
@@ -107,11 +109,22 @@ void FsaAnno::difference(FsaAnno& rhs, DifferenceExpr& expr) {
     rhs.fsa = rhs.fsa.determinize([](const vector<long>&) {});
   fsa = fsa.difference(rhs.fsa, relate);
   assoc = move(new_assoc);
-  add_assoc(expr);
+  if (expr)
+    add_assoc(*expr);
   deterministic = true;
 }
 
-void FsaAnno::intersect(FsaAnno& rhs, IntersectExpr& expr) {
+FsaAnno FsaAnno::epsilon(EpsilonExpr* expr) {
+  FsaAnno r;
+  r.fsa.start = 0;
+  r.fsa.finals.push_back(0);
+  r.fsa.adj.resize(1);
+  if (expr)
+    r.add_assoc(*expr);
+  return r;
+}
+
+void FsaAnno::intersect(FsaAnno& rhs, IntersectExpr* expr) {
   decltype(rhs.assoc) new_assoc;
   vector<vector<long>> rel0, rel1;
   auto relate0 = [&](const vector<long>& xs) {
@@ -141,7 +154,8 @@ void FsaAnno::intersect(FsaAnno& rhs, IntersectExpr& expr) {
     rhs.fsa = rhs.fsa.determinize(relate1);
   fsa = fsa.intersect(rhs.fsa, relate);
   assoc = move(new_assoc);
-  add_assoc(expr);
+  if (expr)
+    add_assoc(*expr);
   deterministic = true;
 }
 
@@ -159,7 +173,7 @@ void FsaAnno::minimize() {
   assoc = move(new_assoc);
 }
 
-void FsaAnno::union_(FsaAnno& rhs, UnionExpr& expr) {
+void FsaAnno::union_(FsaAnno& rhs, UnionExpr* expr) {
   long ln = fsa.n(), rn = rhs.fsa.n(), src = ln+rn,
        old_lsrc = fsa.start;
   fsa.start = src;
@@ -176,18 +190,20 @@ void FsaAnno::union_(FsaAnno& rhs, UnionExpr& expr) {
   assoc.resize(fsa.n());
   REP(i, rhs.fsa.n())
     assoc[ln+i] = move(rhs.assoc[i]);
-  add_assoc(expr);
+  if (expr)
+    add_assoc(*expr);
   deterministic = false;
 }
 
-void FsaAnno::plus(PlusExpr& expr) {
+void FsaAnno::plus(PlusExpr* expr) {
   for (long f: fsa.finals)
     sorted_insert(fsa.adj[f], make_pair(-1L, fsa.start));
-  add_assoc(expr);
+  if (expr)
+    add_assoc(*expr);
   deterministic = false;
 }
 
-void FsaAnno::question(QuestionExpr& expr) {
+void FsaAnno::question(QuestionExpr* expr) {
   long src = fsa.n(), sink = src+1, old_src = fsa.start;
   fsa.start = src;
   fsa.adj.emplace_back();
@@ -196,11 +212,37 @@ void FsaAnno::question(QuestionExpr& expr) {
   fsa.adj[src].emplace_back(-1, sink);
   fsa.finals.push_back(sink);
   assoc.resize(fsa.n());
-  add_assoc(expr);
+  if (expr)
+    add_assoc(*expr);
   deterministic = false;
 }
 
-void FsaAnno::star(StarExpr& expr) {
+void FsaAnno::repeat(RepeatExpr& expr) {
+  FsaAnno r = epsilon(NULL);
+  REP(i, expr.low) {
+    FsaAnno t = *this;
+    r.concat(t, NULL);
+  }
+  if (expr.high == LONG_MAX) {
+    star(NULL);
+    r.concat(*this, NULL);
+  } else if (expr.low < expr.high) {
+    FsaAnno rhs = epsilon(NULL), x = *this;
+    ROF(i, 0, expr.high-expr.low) {
+      FsaAnno t = x;
+      rhs.union_(t, NULL);
+      if (i) {
+        t = *this;
+        x.concat(t, NULL);
+      }
+    }
+    r.concat(rhs, NULL);
+  }
+  r.deterministic = false;
+  *this = move(r);
+}
+
+void FsaAnno::star(StarExpr* expr) {
   long src = fsa.n(), sink = src+1, old_src = fsa.start;
   fsa.start = src;
   fsa.adj.emplace_back();
@@ -213,7 +255,8 @@ void FsaAnno::star(StarExpr& expr) {
   }
   fsa.finals.assign(1, sink);
   assoc.resize(fsa.n());
-  add_assoc(expr);
+  if (expr)
+    add_assoc(*expr);
   deterministic = false;
 }
 
@@ -244,7 +287,7 @@ FsaAnno FsaAnno::collapse(CollapseExpr& expr) {
   return r;
 }
 
-FsaAnno FsaAnno::dot(DotExpr& expr) {
+FsaAnno FsaAnno::dot(DotExpr* expr) {
   FsaAnno r;
   r.fsa.start = 0;
   r.fsa.finals = {1};
@@ -252,7 +295,8 @@ FsaAnno FsaAnno::dot(DotExpr& expr) {
   REP(c, AB)
     r.fsa.adj[0].emplace_back(c, 1);
   r.assoc.resize(2);
-  r.add_assoc(expr);
+  if (expr)
+    r.add_assoc(*expr);
   r.deterministic = true;
   return r;
 }

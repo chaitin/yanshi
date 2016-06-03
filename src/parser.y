@@ -2,6 +2,7 @@
 #include "common.hh"
 #include "location.hh"
 #include "syntax.hh"
+#include <limits.h>
 using std::bitset;
 
 #define YYLTYPE Location
@@ -47,7 +48,7 @@ int parse(const LocationFile& locfile, Stmt*& res);
 %destructor { delete $$; } <stmt>
 %destructor { delete $$; } <charset>
 
-%token ACTION AS CPP EXPORT IMPORT INTACT INVALID_CHARACTER SEMISEMI
+%token ACTION AS CPP EPSILON EXPORT IMPORT INTACT INVALID_CHARACTER SEMISEMI
 %token <integer> CHAR INTEGER
 %token <str> IDENT
 %token <str> BRACED_CODE
@@ -58,7 +59,7 @@ int parse(const LocationFile& locfile, Stmt*& res);
 
 %type <action> action
 %type <stmt> define_stmt stmt stmt_list
-%type <expr> concat_expr difference_expr factor intersect_expr union_expr
+%type <expr> concat_expr difference_expr factor repeat intersect_expr union_expr
 %type <charset> bracket bracket_items
 
 %{
@@ -85,6 +86,15 @@ int yylex(YYSTYPE* yylval, YYLTYPE* loc, Stmt*& res, long& errors, const Locatio
   }
   return token;
 }
+
+#define gen_repeat(x, inner, low, high) \
+  if (low < 0) {                     \
+    FAIL(yyloc, "negative"); \
+  } \
+  if (low > high) { \
+    FAIL(yyloc, "low > high"); \
+  } \
+  x = new RepeatExpr(inner, low, high)
 %}
 
 %%
@@ -127,7 +137,8 @@ concat_expr:
   | concat_expr factor { $$ = new ConcatExpr($1, $2); $$->loc = yyloc; }
 
 factor:
-    IDENT { string t; $$ = new EmbedExpr(t, *$1); delete $1; $$->loc = yyloc; }
+    EPSILON { $$ = new EpsilonExpr; $$->loc = yyloc; }
+  | IDENT { string t; $$ = new EmbedExpr(t, *$1); delete $1; $$->loc = yyloc; }
   | IDENT SEMISEMI IDENT { $$ = new EmbedExpr(*$1, *$3); delete $1; delete $3; $$->loc = yyloc; }
   | '!' IDENT { string t; $$ = new CollapseExpr(t, *$2); delete $2; $$->loc = yyloc; }
   | '!' IDENT SEMISEMI IDENT { $$ = new CollapseExpr(*$2, *$4); delete $2; delete $4; $$->loc = yyloc; }
@@ -136,6 +147,7 @@ factor:
   | bracket { $$ = new BracketExpr($1); $$->loc = yyloc; }
   | '(' union_expr ')' { $$ = $2; }
   | '(' error ')' { $$ = new DotExpr; }
+  | repeat { $$ = $1; }
   | factor '>' action { $$ = $1; $$->entering.push_back($3); }
   | factor '@' action { $$ = $1; $$->finishing.push_back($3); }
   | factor '%' action { $$ = $1; $$->leaving.push_back($3); }
@@ -143,6 +155,12 @@ factor:
   | factor '+' { $$ = new PlusExpr($1); $$->loc = yyloc; }
   | factor '?' { $$ = new QuestionExpr($1); $$->loc = yyloc; }
   | factor '*' { $$ = new StarExpr($1); $$->loc = yyloc; }
+
+repeat:
+    factor '{' INTEGER ',' INTEGER '}' { gen_repeat($$, $1, $3, $5); $$->loc = yyloc; }
+  | factor '{' INTEGER ',' '}' { gen_repeat($$, $1, $3, LONG_MAX); $$->loc = yyloc; }
+  | factor '{' INTEGER '}' { gen_repeat($$, $1, $3, $3); $$->loc = yyloc; }
+  | factor '{' ',' INTEGER '}' { gen_repeat($$, $1, 0, $4); $$->loc = yyloc; }
 
 action:
     IDENT { string t; $$ = new RefAction(t, *$1); delete $1; $$->loc = yyloc; }

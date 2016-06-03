@@ -114,48 +114,55 @@ struct Compiler : Visitor<Expr> {
     FsaAnno rhs = move(st.top());
     visit(*expr.lhs);
     path.pop();
-    st.top().concat(rhs, expr);
+    st.top().concat(rhs, &expr);
   }
   void visit(DifferenceExpr& expr) override {
     visit(*expr.rhs);
     FsaAnno rhs = move(st.top());
     visit(*expr.lhs);
-    st.top().difference(rhs, expr);
+    st.top().difference(rhs, &expr);
   }
   void visit(DotExpr& expr) override {
-    st.push(FsaAnno::dot(expr));
+    st.push(FsaAnno::dot(&expr));
   }
   void visit(EmbedExpr& expr) override {
     FsaAnno anno = compiled[expr.define_stmt];
     anno.add_assoc(expr);
     st.push(anno);
   }
+  void visit(EpsilonExpr& expr) override {
+    st.push(FsaAnno::epsilon(&expr));
+  }
   void visit(IntersectExpr& expr) override {
     visit(*expr.rhs);
     FsaAnno rhs = move(st.top());
     visit(*expr.lhs);
-    st.top().intersect(rhs, expr);
+    st.top().intersect(rhs, &expr);
   }
   void visit(LiteralExpr& expr) override {
     st.push(FsaAnno::literal(expr));
   }
   void visit(PlusExpr& expr) override {
     visit(*expr.inner);
-    st.top().plus(expr);
+    st.top().plus(&expr);
   }
   void visit(QuestionExpr& expr) override {
     visit(*expr.inner);
-    st.top().question(expr);
+    st.top().question(&expr);
+  }
+  void visit(RepeatExpr& expr) override {
+    visit(*expr.inner);
+    st.top().repeat(expr);
   }
   void visit(StarExpr& expr) override {
     visit(*expr.inner);
-    st.top().star(expr);
+    st.top().star(&expr);
   }
   void visit(UnionExpr& expr) override {
     visit(*expr.rhs);
     FsaAnno rhs = move(st.top());
     visit(*expr.lhs);
-    st.top().union_(rhs, expr);
+    st.top().union_(rhs, &expr);
   }
 };
 
@@ -354,8 +361,8 @@ void generate_export(DefineStmt* stmt)
   // substring grammar & this nonterminal is not marked as intact
   if (opt_substring_grammar && ! stmt->intact) {
     DP(3, "Constructing substring grammar");
-    anno.determinize();
-    anno.minimize();
+    //anno.determinize();
+    //anno.minimize();
     anno.substring_grammar();
   }
 

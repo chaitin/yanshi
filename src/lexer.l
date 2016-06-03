@@ -38,7 +38,9 @@ static void unexpected_newline(YYSTYPE* yylval, const char* token_end)
 %option prefix="raw_yy"
 %option stack
 
+%x IN_ACTION
 %x IN_BRACE
+%x IN_CODE
 %x IN_BRACKET
 %x IN_BRACKET_FIRST
 %x IN_LINE_COMMENT
@@ -47,26 +49,21 @@ static void unexpected_newline(YYSTYPE* yylval, const char* token_end)
 
 D			[0-9]
 L			[a-zA-Z_]
-H			[a-fA-F0-9]
-E			[Ee][+-]?{D}+
-FS			(f|F|l|L)
-IS			(u|U|l|L)*
 
 %%
 
 "::" return SEMISEMI;
-"."|"!"|"?"|"="|";"|","|":"|"|"|"+"|"-"|"*"|"/"|"%"|"\$"|"<"|">"|"&"|"@" { return yytext[0]; }
-"("|")" { return yytext[0]; }
+[-!&*()=+,.?|{}] { return yytext[0]; }
 
 "action" return ACTION;
 "as" return AS;
 "c++" return CPP;
+"epsilon" return EPSILON;
 "export" return EXPORT;
 "import" return IMPORT;
 "intact" return INTACT;
 {L}({L}|{D})* { yylval->str = new string(yytext); return IDENT; }
-
-[0-9]+ { yylval->integer = atol(yytext); return INTEGER; }
+{D}+ { yylval->integer = atol(yytext); return INTEGER; }
 
 "#" yy_push_state(IN_LINE_COMMENT, yyscanner);
 <IN_LINE_COMMENT>{
@@ -95,14 +92,16 @@ IS			(u|U|l|L)*
   "\n" unexpected_newline(yylval, "]"); return INVALID_CHARACTER;
 }
 
-"{" tmp_bracket.clear(); yy_push_state(IN_BRACE, yyscanner);
-<IN_BRACE>{
+[>@%$] BEGIN IN_ACTION; return yytext[0];
+<IN_ACTION>"{" tmp_bracket.clear(); yy_push_state(IN_CODE, yyscanner);
+<IN_CODE>{
   "'" { tmp_bracket += '\''; yy_push_state(IN_Q_STRING, yyscanner); }
   "\"" { tmp_bracket += '"'; yy_push_state(IN_QQ_STRING, yyscanner); }
-  "{" { tmp_bracket += '{'; yy_push_state(IN_BRACE, yyscanner); }
+  "{" { tmp_bracket += '{'; yy_push_state(IN_CODE, yyscanner); }
   "}" {
     yy_pop_state(yyscanner);
-    if (YY_START == INITIAL) {
+    if (YY_START == IN_ACTION) {
+      BEGIN INITIAL;
       yylval->str = new string(tmp_bracket);
       return BRACED_CODE;
     } else
@@ -123,6 +122,7 @@ IS			(u|U|l|L)*
     tmp_bracket += yytext;
   }
   \\' tmp_str += '\''; tmp_bracket += yytext;
+  \\\\ tmp_str += '\\'; tmp_bracket += yytext;
   .|\n tmp_str += yytext[0]; tmp_bracket += yytext[0];
   <<EOF>> yy_pop_state(yyscanner); unexpected_eof(yylval, "'");
 }
