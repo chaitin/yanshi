@@ -1,0 +1,16 @@
+#compdef yanshi
+
+_arguments \
+  '(-c --check)'{-c,--check}'=[check syntax & use/def]' \
+  '(-d --debug)'{-d,--debug}'=[debug level]' \
+  '--dump-action[dump associated actions for each edge]' \
+  '--dump-assoc[dump associated AST Expr for each state]' \
+  '--dump-automaton[dump automata]' \
+  '--dump-module[dump module use/def/...]' \
+  '--dump-tree[dump AST]' \
+  '(-I --import)'{-I,--import}'=[add <dir> to search path for "import"]' \
+  '(-l --debug-output)'{-l,--debug-level}'=[filename for debug output]' \
+  '(-o --output)'{-o,--output}'=[.cc output filename]' \
+  '(-s --substring-grammar)'{-s,--substring-grammar}'=[construct regular approximation of the substring grammar. Inner states of nonterminals labeled 'intact' are not connected to start/final]' \
+  '(-h --help)'{-h,--help}'=[display this help]' \
+  '1:file:_files'\

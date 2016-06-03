@@ -21,14 +21,15 @@ void print_help(FILE *fh)
         "Options:\n"
         "  --check                   check syntax & use/def\n"
         "  --debug                   debug level\n"
-        "  --debug-output            debug output\n"
+        "  --debug-output            filename for debug output\n"
         "  --dump-action             dump associated actions for each edge\n"
         "  --dump-assoc              dump associated AST Expr for each state\n"
         "  --dump-automaton          dump automata\n"
         "  --dump-module             dump module use/def/...\n"
         "  --dump-tree               dump AST\n"
-        "  --import                  add the directory to search path for 'import'\n"
+        "  -I,--import <dir>         add <dir> to search path for 'import'\n"
         "  --substring-grammar       construct regular approximation of the substring grammar. Inner states of nonterminals labeled 'intact' are not connected to start/final\n"
+        "  -o,--output <file>        .cc output filename\n"
         "  -h, --help                display this help and exit\n"
         "\n"
         , fh);
@@ -43,13 +44,12 @@ int main(int argc, char *argv[])
     {"check",               required_argument, 0,   'c'},
     {"debug",               required_argument, 0,   'd'},
     {"debug-output",        required_argument, 0,   'l'},
-    {"dump-action",         no_argument,      0,   1000},
+    {"dump-action",         no_argument,       0,   1000},
     {"dump-assoc",          no_argument,       0,   1001},
     {"dump-automaton",      no_argument,       0,   1002},
     {"dump-module",         no_argument,       0,   1003},
     {"dump-tree",           no_argument,       0,   1004},
     {"import",              required_argument, 0,   'I'},
-    {"module-info",         required_argument, 0,   'm'},
     {"substring-grammar",   no_argument,       0,   's'},
     {"output",              required_argument, 0,   'o'},
     {0,                     0,                 0,   0},
