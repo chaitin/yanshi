@@ -20,8 +20,8 @@ syn region yanshiBrace matchgroup=Delimiter start='{' end='}' fold contains=@yan
 syn region yanshiBracket start='\[' skip=+\\\\\|\\]+ end=']'
 syn region yanshiComment start="#" skip='\\$' end='$' keepend contains=@yanshiCommentGroup,@Spell
 syn region yanshiImported display contained start="+" skip=+\\\\\|\\"+ end=+"+
-syn region yanshiQQString start=+"+ skip=+\\\\\|\\"+ end=+"+ contains=yanshiSpecial
-syn region yanshiQString start=+'+ skip=+\\'+ end=+'+
+syn region yanshiQQString start=+"+ skip=+\\.+ end=+"+ contains=yanshiSpecial
+syn region yanshiQString start=+'+ skip=+\\.+ end=+'+
 
 syn region yanshiDefineStmt start='^\w\+\s*=' end='$' skipnl contains=@yanshiExpr,yanshiComment,yanshiParen0
 

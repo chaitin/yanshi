@@ -210,11 +210,19 @@ struct ModuleUse : PrePostActionExprStmtVisitor {
 
 Module* load_module(long& n_errors, const string& filename)
 {
-  FILE* file = filename != "-" ? fopen(filename.c_str(), "r") : stdin;
+  FILE* file = stdin;
+  if (filename != "-") {
+    file = fopen(filename.c_str(), "r");
+    for (string& include: opt_include_paths) {
+      if (file) break;
+      file = fopen((include+'/'+filename).c_str(), "r");
+    }
+  }
   if (! file) {
     n_errors++;
     return NULL;
   }
+
   pair<dev_t, ino_t> inode{0, 0}; // stdin -> {0, 0}
   if (file != stdin) {
     struct stat sb;
@@ -274,12 +282,8 @@ static vector<DefineStmt*> topo_define_stmts(long& n_errors)
         i--;
       st.push_back(st[i-1]);
       for (; i < st.size(); i++) {
-        //long line1, col1, _line2, col2;
-        //st[i]->module->locfile.locate(st[i]->loc, line1, col1, _line2, col2);
         fputs("  ", stderr);
         st[i]->module->locfile.error_context(st[i]->loc, "required by %s", st[i]->lhs.c_str());
-        //fprintf(stderr, YELLOW"  %s" CYAN":%ld:%ld-%ld: " RED"required by %s\n", st[i]->module->locfile.filename.c_str(), line1+1, col1+1, col2, st[i]->lhs.c_str());
-        //st[i]->module->locfile.context(st[i]->loc);
       }
       fputs("\n", stderr);
       return true;

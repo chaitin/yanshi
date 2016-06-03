@@ -39,31 +39,33 @@ static void unexpected_newline(YYSTYPE* yylval, const char* token_end)
 %option stack
 
 %x IN_ACTION
+%x IN_ACTION_OP
 %x IN_BRACE
 %x IN_CODE
 %x IN_BRACKET
 %x IN_BRACKET_FIRST
 %x IN_LINE_COMMENT
+%s IN_PAREN
 %x IN_Q_STRING
 %x IN_QQ_STRING
 
 D			[0-9]
-L			[a-zA-Z_]
+L			[a-zA-Z_\x80-\xff]
 
 %%
 
+";" {}
 "::" return SEMISEMI;
-[-!&*()=+,.?|{}] { return yytext[0]; }
-
-"action" return ACTION;
+[-!&*=+,.?|{}] return yytext[0];
+"action" yy_push_state(IN_ACTION, yyscanner); return ACTION;
 "as" return AS;
 "c++" return CPP;
 "epsilon" return EPSILON;
 "export" return EXPORT;
 "import" return IMPORT;
 "intact" return INTACT;
-{L}({L}|{D})* { yylval->str = new string(yytext); return IDENT; }
-{D}+ { yylval->integer = atol(yytext); return INTEGER; }
+{L}({L}|{D})* yylval->str = new string(yytext); return IDENT;
+{D}+ yylval->integer = atol(yytext); return INTEGER;
 
 "#" yy_push_state(IN_LINE_COMMENT, yyscanner);
 <IN_LINE_COMMENT>{
@@ -72,36 +74,87 @@ L			[a-zA-Z_]
   . {}
 }
 
+"(" yy_push_state(IN_PAREN, yyscanner); return '(';
+")" {
+  if (YY_START != IN_PAREN) {
+    unexpected_newline(yylval, ")");
+    return INVALID_CHARACTER;
+  }
+  yy_pop_state(yyscanner);
+  return ')';
+}
+
 "[" yy_push_state(IN_BRACKET_FIRST, yyscanner); return '[';
 <IN_BRACKET_FIRST>{
-  "^" { yy_pop_state(yyscanner); yy_push_state(IN_BRACKET, yyscanner); return '^'; }
+  "^" BEGIN IN_BRACKET; return '^';
   [^-\\\]\n] { yy_pop_state(yyscanner); yy_push_state(IN_BRACKET, yyscanner); yylval->integer = yytext[0]; return CHAR; }
+  "-" { yylval->integer = '-'; return CHAR; }
 }
 <IN_BRACKET>{
   "]" {
     yy_pop_state(yyscanner);
-    if (YY_START == INITIAL)
+    if (YY_START == INITIAL || YY_START == IN_PAREN)
       return ']';
   }
   [^-\\\]\n] yylval->integer = yytext[0]; return CHAR;
 }
 <IN_BRACKET_FIRST,IN_BRACKET>{
-  \\. yylval->integer = yytext[1]; return CHAR;
-  - return '-';
-  <<EOF>> yy_pop_state(yyscanner); unexpected_eof(yylval, "]");
+  \\[0-7]{1,3} {
+    BEGIN IN_BRACKET;
+    long c = strtol(yytext+1, NULL, 8);
+    if (UCHAR_MAX < c) {
+      yylval->errmsg = aprintf("Invalid number after \\-escape: %s", yytext+1);
+      return INVALID_CHARACTER;
+    }
+    yylval->integer = c;
+    return CHAR;
+  }
+  \\x[0-9a-fA-F]+ {
+    BEGIN IN_BRACKET;
+    long c = strtol(yytext+2, NULL, 16);
+    if (UCHAR_MAX < c) {
+      yylval->errmsg = aprintf("Invalid number after \\-escape: %s", yytext+1);
+      return INVALID_CHARACTER;
+    }
+    yylval->integer = c;
+    return CHAR;
+  }
+  \\a BEGIN IN_BRACKET; yylval->integer = '\a'; return CHAR;
+  \\b BEGIN IN_BRACKET; yylval->integer = '\b'; return CHAR;
+  \\f BEGIN IN_BRACKET; yylval->integer = '\f'; return CHAR;
+  \\n BEGIN IN_BRACKET; yylval->integer = '\n'; return CHAR;
+  \\r BEGIN IN_BRACKET; yylval->integer = '\r'; return CHAR;
+  \\t BEGIN IN_BRACKET; yylval->integer = '\t'; return CHAR;
+  \\v BEGIN IN_BRACKET; yylval->integer = '\v'; return CHAR;
+  \\. BEGIN IN_BRACKET; yylval->integer = yytext[1]; return CHAR;
+  - BEGIN IN_BRACKET; return '-';
   "\n" unexpected_newline(yylval, "]"); return INVALID_CHARACTER;
+  <<EOF>> yy_pop_state(yyscanner); unexpected_eof(yylval, "]");
 }
 
-[>@%$] BEGIN IN_ACTION; return yytext[0];
-<IN_ACTION>"{" tmp_bracket.clear(); yy_push_state(IN_CODE, yyscanner);
+<IN_ACTION>{
+  {L}({L}|{D})* yylval->str = new string(yytext); return IDENT;
+  "{" BEGIN IN_CODE; tmp_bracket.clear();
+  [ \t]+ {}
+  .|\n {}
+  <<EOF>> yy_pop_state(yyscanner);
+}
+
+[>@%$] yy_push_state(IN_ACTION_OP, yyscanner); return yytext[0];
+<IN_ACTION_OP>{
+  {L}({L}|{D})* yy_pop_state(yyscanner); yylval->str = new string(yytext); return IDENT;
+  "{" BEGIN IN_CODE; tmp_bracket.clear();
+  [ \t\n]+ {}
+  <<EOF>> yy_pop_state(yyscanner);
+  . yylval->errmsg = strdup("Invalid character"); return INVALID_CHARACTER;
+}
 <IN_CODE>{
   "'" { tmp_bracket += '\''; yy_push_state(IN_Q_STRING, yyscanner); }
   "\"" { tmp_bracket += '"'; yy_push_state(IN_QQ_STRING, yyscanner); }
   "{" { tmp_bracket += '{'; yy_push_state(IN_CODE, yyscanner); }
   "}" {
     yy_pop_state(yyscanner);
-    if (YY_START == IN_ACTION) {
-      BEGIN INITIAL;
+    if (YY_START == INITIAL || YY_START == IN_PAREN) {
       yylval->str = new string(tmp_bracket);
       return BRACED_CODE;
     } else
@@ -115,7 +168,7 @@ L			[a-zA-Z_]
 <IN_Q_STRING>{
   "'" {
     yy_pop_state(yyscanner);
-    if (YY_START == INITIAL) {
+    if (YY_START == INITIAL || YY_START == IN_PAREN) {
       yylval->str = new string(tmp_str);
       return STRING_LITERAL;
     }
@@ -131,7 +184,7 @@ L			[a-zA-Z_]
 <IN_QQ_STRING>{
   "\"" {
     yy_pop_state(yyscanner);
-    if (YY_START == INITIAL) {
+    if (YY_START == INITIAL || YY_START == IN_PAREN) {
       yylval->str = new string(tmp_str);
       return STRING_LITERAL;
     }
@@ -171,6 +224,6 @@ L			[a-zA-Z_]
   <<EOF>> unexpected_eof(yylval, "\""); BEGIN INITIAL;
 }
 
-"\n" return '\n';
+"\n" if (YY_START == INITIAL) return '\n';
 [ \t]+ {}
 . { yylval->errmsg = strdup("Invalid character"); return INVALID_CHARACTER; }

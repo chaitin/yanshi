@@ -113,7 +113,6 @@ struct Compiler : Visitor<Expr> {
     visit(*expr.rhs);
     FsaAnno rhs = move(st.top());
     visit(*expr.lhs);
-    path.pop();
     st.top().concat(rhs, &expr);
   }
   void visit(DifferenceExpr& expr) override {

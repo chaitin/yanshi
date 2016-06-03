@@ -19,9 +19,18 @@ void print_help(FILE *fh)
   fputs(
         "\n"
         "Options:\n"
+        "  --check                   check syntax & use/def\n"
+        "  --debug                   debug level\n"
+        "  --debug-output            debug output\n"
+        "  --dump-action             dump associated actions for each edge\n"
+        "  --dump-assoc              dump associated AST Expr for each state\n"
+        "  --dump-automaton          dump automata\n"
+        "  --dump-module             dump module use/def/...\n"
+        "  --dump-tree               dump AST\n"
+        "  --import                  add the directory to search path for 'import'\n"
+        "  --substring-grammar       construct regular approximation of the substring grammar. Inner states of nonterminals labeled 'intact' are not connected to start/final\n"
         "  -h, --help                display this help and exit\n"
         "\n"
-        "Examples:\n"
         , fh);
   exit(fh == stdout ? 0 : EX_USAGE);
 }
@@ -34,11 +43,12 @@ int main(int argc, char *argv[])
     {"check",               required_argument, 0,   'c'},
     {"debug",               required_argument, 0,   'd'},
     {"debug-output",        required_argument, 0,   'l'},
-    {"dump-action",          no_argument,      0,   1000},
+    {"dump-action",         no_argument,      0,   1000},
     {"dump-assoc",          no_argument,       0,   1001},
     {"dump-automaton",      no_argument,       0,   1002},
     {"dump-module",         no_argument,       0,   1003},
     {"dump-tree",           no_argument,       0,   1004},
+    {"import",              required_argument, 0,   'I'},
     {"module-info",         required_argument, 0,   'm'},
     {"substring-grammar",   no_argument,       0,   's'},
     {"output",              required_argument, 0,   'o'},
@@ -49,7 +59,7 @@ int main(int argc, char *argv[])
   opt_dump_assoc = opt_dump_automaton = true;
 #endif
 
-  while ((opt = getopt_long(argc, argv, "Dcd:hl:o:s", long_options, NULL)) != -1) {
+  while ((opt = getopt_long(argc, argv, "Dcd:hI:l:o:s", long_options, NULL)) != -1) {
     switch (opt) {
     case 'D':
       break;
@@ -59,15 +69,18 @@ int main(int argc, char *argv[])
     case 'd':
       debug_level = get_long(optarg);
       break;
+    case 'h':
+      print_help(stdout);
+      break;
+    case 'I':
+      opt_include_paths.push_back(string(optarg));
+      break;
     case 'l':
       if (debug_file)
         err_exit(EX_USAGE, "multiple '-l'");
       debug_file = fopen(optarg, "w");
       if (! debug_file)
         err_exit(EX_OSFILE, "fopen");
-      break;
-    case 'h':
-      print_help(stdout);
       break;
     case 'o':
       opt_output_filename = optarg;
