@@ -49,6 +49,7 @@ int main(int argc, char *argv[])
     {"dump-automaton",      no_argument,       0,   1002},
     {"dump-module",         no_argument,       0,   1003},
     {"dump-tree",           no_argument,       0,   1004},
+    {"graph",               no_argument,       0,   'G'},
     {"import",              required_argument, 0,   'I'},
     {"substring-grammar",   no_argument,       0,   's'},
     {"output",              required_argument, 0,   'o'},
@@ -59,7 +60,7 @@ int main(int argc, char *argv[])
   opt_dump_assoc = opt_dump_automaton = true;
 #endif
 
-  while ((opt = getopt_long(argc, argv, "Dcd:hI:l:o:s", long_options, NULL)) != -1) {
+  while ((opt = getopt_long(argc, argv, "Dcd:GhI:l:o:s", long_options, NULL)) != -1) {
     switch (opt) {
     case 'D':
       break;
@@ -68,6 +69,9 @@ int main(int argc, char *argv[])
       break;
     case 'd':
       debug_level = get_long(optarg);
+      break;
+    case 'G':
+      opt_mode = "graphviz";
       break;
     case 'h':
       print_help(stdout);

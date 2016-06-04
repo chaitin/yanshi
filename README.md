@@ -12,7 +12,7 @@
 
 ## 运行
 
-在某个`$PATH`目录中添加`build/yanshi` symbol link。
+在某个`$PATH`目录中添加`build/yanshi`的symbolic link。
 
 `yanshi a.ys -o a.cc`
 
@@ -40,3 +40,21 @@ fpath=(~/.zsh $fpath)
 
 # ln -sr contrib/zsh/_yanshi ~/.zsh/
 ```
+
+## 源文件
+
+```
+src
+  common.{cc,hh}
+  main.{cc,hh}
+  syntax.{cc,hh}
+  loader.{cc,hh}
+  fsa.{cc,hh}
+  fsa_anno.{cc,hh}
+  compiler.{cc,hh}
+  parser.y
+  lexer.l
+  location.cc
+```
+
+## 原理

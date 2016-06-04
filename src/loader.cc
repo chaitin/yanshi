@@ -390,11 +390,13 @@ long load(const string& filename)
     return n_errors;
   }
 
-  DP(1, "Generating header");
-  generate_header(mo);
-
-  DP(1, "Generating body");
-  generate_body(mo);
+  if (! strcmp(opt_mode, "c++")) {
+    DP(1, "Generating C++");
+    generate_cxx(mo);
+  } else {
+    DP(1, "Generating Graphviz dot");
+    generate_graphviz(mo);
+  }
 
   fclose(output);
   return n_errors;
