@@ -155,6 +155,7 @@ factor:
   | factor '+' { $$ = new PlusExpr($1); $$->loc = yyloc; }
   | factor '?' { $$ = new QuestionExpr($1); $$->loc = yyloc; }
   | factor '*' { $$ = new StarExpr($1); $$->loc = yyloc; }
+  | '~' factor { $$ = new ComplementExpr($2); $$->loc = yyloc; }
 
 repeat:
     factor '{' INTEGER ',' INTEGER '}' { gen_repeat($$, $1, $3, $5); $$->loc = yyloc; }

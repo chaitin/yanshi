@@ -110,6 +110,10 @@ struct Compiler : Visitor<Expr> {
   void visit(CollapseExpr& expr) override {
     st.push(FsaAnno::collapse(expr));
   }
+  void visit(ComplementExpr& expr) override {
+    visit(*expr.inner);
+    st.top().complement(&expr);
+  }
   void visit(ConcatExpr& expr) override {
     visit(*expr.rhs);
     FsaAnno rhs = move(st.top());
@@ -355,8 +359,6 @@ void compile_export(DefineStmt* stmt)
   // substring grammar & this nonterminal is not marked as intact
   if (opt_substring_grammar && ! stmt->intact) {
     DP(3, "Constructing substring grammar");
-    //anno.determinize();
-    //anno.minimize();
     anno.substring_grammar();
   }
 

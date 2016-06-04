@@ -16,6 +16,18 @@ bool assoc_has_expr(vector<pair<Expr*, ExprTag>>& as, Expr* x)
   return it != as.end() && it->first == x;
 }
 
+void sort_assoc(vector<pair<Expr*, ExprTag>>& as)
+{
+  sort(ALL(as));
+  auto i = as.begin(), j = i, k = i;
+  for (; i != as.end(); i = j) {
+    while (++j != as.end() && i->first == j->first)
+      i->second = ExprTag(long(i->second) | long(j->second));
+    *k++ = *i;
+  }
+  as.erase(k, as.end());
+}
+
 void FsaAnno::add_assoc(Expr& expr)
 {
   // has actions: actions need tags to differentiate 'entering', 'leaving', ...
@@ -38,6 +50,12 @@ void FsaAnno::add_assoc(Expr& expr)
   }
 }
 
+void FsaAnno::complement(ComplementExpr* expr) {
+  fsa = ~ fsa;
+  assoc.assign(fsa.n(), {});
+  // 'deterministic' is preserved
+}
+
 void FsaAnno::concat(FsaAnno& rhs, ConcatExpr* expr) {
   long ln = fsa.n(), rn = rhs.fsa.n();
   for (long f: fsa.finals)
@@ -56,18 +74,6 @@ void FsaAnno::concat(FsaAnno& rhs, ConcatExpr* expr) {
   if (expr)
     add_assoc(*expr);
   deterministic = false;
-}
-
-void sort_assoc(vector<pair<Expr*, ExprTag>>& as)
-{
-  sort(ALL(as));
-  auto i = as.begin(), j = i, k = i;
-  for (; i != as.end(); i = j) {
-    while (++j != as.end() && i->first == j->first)
-      i->second = ExprTag(long(i->second) | long(j->second));
-    *k++ = *i;
-  }
-  as.erase(k, as.end());
 }
 
 void FsaAnno::determinize() {

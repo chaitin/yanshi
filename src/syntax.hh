@@ -40,6 +40,7 @@ struct Visitor<Action> {
 struct Expr;
 struct BracketExpr;
 struct CollapseExpr;
+struct ComplementExpr;
 struct ConcatExpr;
 struct DifferenceExpr;
 struct DotExpr;
@@ -57,6 +58,7 @@ struct Visitor<Expr> {
   virtual void visit(Expr&) = 0;
   virtual void visit(BracketExpr&) = 0;
   virtual void visit(CollapseExpr&) = 0;
+  virtual void visit(ComplementExpr&) = 0;
   virtual void visit(ConcatExpr&) = 0;
   virtual void visit(DifferenceExpr&) = 0;
   virtual void visit(DotExpr&) = 0;
@@ -139,6 +141,14 @@ struct CollapseExpr : Visitable<Expr, CollapseExpr> {
   string qualified, ident;
   DefineStmt* define_stmt = NULL; // set by ModuleUse
   CollapseExpr(string& qualified, string& ident) : qualified(move(qualified)), ident(move(ident)) {}
+};
+
+struct ComplementExpr : Visitable<Expr, ComplementExpr> {
+  Expr* inner;
+  ComplementExpr(Expr* inner) : inner(inner) {}
+  ~ComplementExpr() {
+    delete inner;
+  }
 };
 
 struct ConcatExpr : Visitable<Expr, ConcatExpr> {
@@ -333,6 +343,12 @@ struct StmtPrinter : Visitor<Action>, Visitor<Expr>, Visitor<Stmt> {
     else
       printf("%s\n", expr.ident.c_str());
   }
+  void visit(ComplementExpr& expr) override {
+    printf("%*s%s\n", 2*depth, "", "ComplementExpr");
+    depth++;
+    visit(*expr.inner);
+    depth--;
+  }
   void visit(ConcatExpr& expr) override {
     printf("%*s%s\n", 2*depth, "", "ConcatExpr");
     depth++;
@@ -469,6 +485,7 @@ struct PrePostActionExprStmtVisitor : Visitor<Action>, Visitor<Expr>, Visitor<St
   }
   void visit(BracketExpr& expr) override {}
   void visit(CollapseExpr& expr) override {}
+  void visit(ComplementExpr& expr) override { visit(*expr.inner); }
   void visit(ConcatExpr& expr) override {
     visit(*expr.lhs);
     visit(*expr.rhs);

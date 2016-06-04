@@ -56,7 +56,7 @@ L			[a-zA-Z_\x80-\xff]
 
 ";" {}
 "::" return SEMISEMI;
-[-!&*=+,.?|{}] return yytext[0];
+[-~!&*=+,.?|{}] return yytext[0];
 "action" yy_push_state(IN_ACTION, yyscanner); return ACTION;
 "as" return AS;
 "c++" return CPP;

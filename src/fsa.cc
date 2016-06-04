@@ -40,7 +40,7 @@ void Fsa::epsilon_closure(vector<long>& src) const
 {
   static vector<bool> vis;
   if (n() > vis.size())
-    vis.assign(n(), false);
+    vis.resize(n());
   for (long i: src)
     vis[i] = true;
   REP(i, src.size()) {
@@ -56,6 +56,38 @@ void Fsa::epsilon_closure(vector<long>& src) const
   for (long i: src)
     vis[i] = false;
   sort(ALL(src));
+}
+
+Fsa Fsa::operator~() const
+{
+  long accept = n();
+  Fsa r;
+  r.start = start;
+  r.adj.resize(accept+1);
+  REP(i, accept) {
+    long j = 0;
+    for (auto& e: adj[i]) {
+      for (; j < e.first; j++)
+        r.adj[i].emplace_back(j, accept);
+      r.adj[i].emplace_back(e.first, e.second);
+      j = e.first+1;
+    }
+    for (; j < AB; j++)
+      r.adj[i].emplace_back(j, accept);
+  }
+  r.adj.emplace_back();
+  REP(i, AB)
+    r.adj[accept].emplace_back(i, accept);
+  vector<long> new_finals;
+  auto j = finals.begin();
+  REP(i, accept+1) {
+    while (j != finals.end() && *j < i)
+      ++j;
+    if (j == finals.end() || *j != i)
+      new_finals.push_back(i);
+  }
+  r.finals = move(new_finals);
+  return r;
 }
 
 Fsa Fsa::difference(const Fsa& rhs, function<void(long)> relate) const
@@ -133,30 +165,6 @@ Fsa Fsa::intersect(const Fsa& rhs, function<void(long, long)> relate) const
   return r;
 }
 
-Fsa Fsa::operator~() const
-{
-  Fsa r;
-  r.adj.resize(n()+1);
-  r.start = start;
-  REP(i, n()) {
-    long last = 0;
-    for (auto& e: adj[i]) {
-      for (; last < e.first; last++)
-        r.adj[i].emplace_back(last, n());
-      r.adj[i].emplace_back(e.first, e.second);
-    }
-  }
-  REP(i, AB)
-    r.adj[n()].emplace_back(i, n());
-  long j = 0;
-  REP(i, n()+1)
-    if (j < finals.size() && i == finals[j])
-      j++;
-    else
-      r.finals.push_back(i);
-  return r;
-}
-
 Fsa Fsa::determinize(function<void(const vector<long>&)> relate) const
 {
   Fsa r;
@@ -171,7 +179,7 @@ Fsa Fsa::determinize(function<void(const vector<long>&)> relate) const
     relate(q[i]);
     bool final = false;
     for (long u: q[i]) {
-      if (binary_search(ALL(finals), u))
+      if (is_final(u))
         final = true;
       its[u] = adj[u].begin();
       // skip epsilon

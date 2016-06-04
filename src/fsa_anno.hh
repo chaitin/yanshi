@@ -16,6 +16,7 @@ struct FsaAnno {
   Fsa fsa;
   vector<vector<pair<Expr*, ExprTag>>> assoc;
   void add_assoc(Expr& expr);
+  void complement(ComplementExpr* expr);
   void concat(FsaAnno& rhs, ConcatExpr* expr);
   void determinize();
   void difference(FsaAnno& rhs, DifferenceExpr* expr);
