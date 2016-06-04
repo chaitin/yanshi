@@ -38,17 +38,23 @@ bool Fsa::is_final(long x) const
 
 void Fsa::epsilon_closure(vector<long>& src) const
 {
-  unordered_set<long> vis{ALL(src)};
-  for (long i = 0; i < src.size(); i++) {
+  static vector<bool> vis;
+  if (n() > vis.size())
+    vis.assign(n(), false);
+  for (long i: src)
+    vis[i] = true;
+  REP(i, src.size()) {
     long u = src[i];
     for (auto& e: adj[u]) {
       if (-1 < e.first) break;
-      if (! vis.count(e.second)) {
-        vis.insert(e.second);
+      if (! vis[e.second]) {
+        vis[e.second] = true;
         src.push_back(e.second);
       }
     }
   }
+  for (long i: src)
+    vis[i] = false;
   sort(ALL(src));
 }
 

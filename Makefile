@@ -1,9 +1,9 @@
 ifeq ($(build),release)
   BUILD := release
-  CFLAGS := -g3 -Os -std=c++1y
+  CFLAGS += -g3 -Os -std=c++1y
 else
   BUILD := build
-  CFLAGS := -g3 -std=c++1y -fsanitize=undefined,address -DDEBUG
+  CFLAGS += -g3 -std=c++1y -fsanitize=undefined,address -DDEBUG
   LDLIBS := -lasan -lubsan
 endif
 
