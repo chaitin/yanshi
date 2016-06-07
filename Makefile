@@ -9,6 +9,7 @@ endif
 
 CPPFLAGS := -Isrc -I.
 CXXFLAGS := $(CFLAGS)
+LDLIBS := -licuuc
 SRC := $(filter-out src/lexer.cc src/parser.cc, $(wildcard src/*.cc)) src/lexer.cc src/parser.cc
 OBJ := $(addprefix $(BUILD)/,$(subst src/,,$(SRC:.cc=.o)))
 UNITTEST_SRC := $(wildcard unittest/*.cc)

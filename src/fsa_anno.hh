@@ -15,8 +15,10 @@ struct FsaAnno {
   bool deterministic;
   Fsa fsa;
   vector<vector<pair<Expr*, ExprTag>>> assoc;
+  void accessible();
   void add_assoc(Expr& expr);
   void complement(ComplementExpr* expr);
+  void co_accessible();
   void concat(FsaAnno& rhs, ConcatExpr* expr);
   void determinize();
   void difference(FsaAnno& rhs, DifferenceExpr* expr);
@@ -33,4 +35,5 @@ struct FsaAnno {
   static FsaAnno dot(DotExpr* expr);
   static FsaAnno epsilon(EpsilonExpr* expr);
   static FsaAnno literal(LiteralExpr& expr);
+  static FsaAnno unicode_range(UnicodeRangeExpr& expr);
 };

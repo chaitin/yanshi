@@ -14,6 +14,10 @@ typedef int8_t i8;
 typedef int16_t i16;
 typedef int32_t i32;
 typedef int64_t i64;
+typedef uint8_t u8;
+typedef uint16_t u16;
+typedef uint32_t u32;
+typedef uint64_t u64;
 
 #define LEN_OF(x) (sizeof(x)/sizeof(*x))
 #define ALL(x) (x).begin(), (x).end()
@@ -54,8 +58,7 @@ void log_status(const char *format, ...);
 
 extern long debug_level;
 extern FILE* debug_file;
-#ifdef DEBUG
-# define DP(level, ...)  do {          \
+#define DP(level, ...)  do {           \
     if (level <= debug_level) {        \
       fprintf(debug_file, "%s:%d ", __FILE__, __LINE__); \
       fprintf(debug_file, __VA_ARGS__);\
@@ -63,9 +66,6 @@ extern FILE* debug_file;
       fflush(debug_file);              \
     }                                  \
   } while (0)
-#else
-# define DP(level, ...)
-#endif
 
 template<class T>
 void sorted_insert(vector<T>& a, const T& x)

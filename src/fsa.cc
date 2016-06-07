@@ -90,6 +90,94 @@ Fsa Fsa::operator~() const
   return r;
 }
 
+void Fsa::accessible(function<void(long)> relate)
+{
+  long nid = 0;
+  vector<long> q{start}, id(n(), -1);
+  id[start] = nid++;
+  REP(i, q.size()) {
+    long u = q[i];
+    for (auto& e: adj[u])
+      if (id[e.second] < 0) {
+        id[e.second] = nid++;
+        q.push_back(e.second);
+      }
+  }
+
+  auto it = finals.begin(), it2 = it;
+  REP(i, n())
+    if (id[i] >= 0) {
+      relate(i);
+      if (start == i)
+        start = id[i];
+      while (it != finals.end() && *it < i)
+        ++it;
+      if (it != finals.end() && *it == i)
+        *it2++ = id[i];
+      long k = 0;
+      for (auto& e: adj[i])
+        if (id[e.second] >= 0)
+          adj[i][k++] = {e.first, id[e.second]}; // unordered unless deterministic
+      adj[i].resize(k);
+      if (id[i] != i)
+        adj[id[i]] = move(adj[i]);
+    }
+  finals.erase(it2, finals.end());
+  adj.resize(nid);
+}
+
+void Fsa::co_accessible(function<void(long)> relate)
+{
+  vector<vector<pair<long, long>>> radj(n());
+  REP(i, n())
+    for (auto& e: adj[i])
+      radj[e.second].emplace_back(e.first, i);
+  REP(i, n())
+    sort(ALL(radj[i]));
+  vector<long> q = finals, id(n(), 0);
+  for (long f: finals)
+    id[f] = 1;
+  REP(i, q.size()) {
+    long u = q[i];
+    for (auto& e: radj[u])
+      if (! id[e.second]) {
+        id[e.second] = 1;
+        q.push_back(e.second);
+      }
+  }
+  if (! id[start]) {
+    start = 0;
+    finals.clear();
+    adj.assign(1, {});
+    return;
+  }
+
+  long j = 0;
+  REP(i, n())
+    id[i] = id[i] ? j++ : -1;
+
+  auto it = finals.begin(), it2 = it;
+  REP(i, n())
+    if (id[i] >= 0) {
+      relate(i);
+      if (start == i)
+        start = id[i];
+      while (it != finals.end() && *it < i)
+        ++it;
+      if (it != finals.end() && *it == i)
+        *it2++ = id[i];
+      long k = 0;
+      for (auto& e: adj[i])
+        if (id[e.second] >= 0)
+          adj[i][k++] = {e.first, id[e.second]}; // unordered unless deterministic
+      adj[i].resize(k);
+      if (id[i] != i)
+        adj[id[i]] = move(adj[i]);
+    }
+  finals.erase(it2, finals.end());
+  adj.resize(j);
+}
+
 Fsa Fsa::difference(const Fsa& rhs, function<void(long)> relate) const
 {
   Fsa r;
@@ -176,6 +264,8 @@ Fsa Fsa::determinize(function<void(const vector<long>&)> relate) const
   m[q[0]] = 0;
   r.start = 0;
   REP(i, q.size()) {
+    if (i%100==0)
+    DP(5, "%ld %ld", i, q[i].size());
     relate(q[i]);
     bool final = false;
     for (long u: q[i]) {
@@ -365,56 +455,4 @@ Fsa Fsa::distinguish(function<void(vector<long>&)> relate) const
   //    }
   //    puts("");
   //  }
-}
-
-void Fsa::remove_dead(function<void(long)> relate)
-{
-  vector<vector<pair<long, long>>> radj(n());
-  REP(i, n())
-    for (auto& e: adj[i])
-      radj[e.second].emplace_back(e.first, i);
-  REP(i, n())
-    sort(ALL(radj[i]));
-  vector<long> q = finals, id(n(), 0);
-  for (long f: finals)
-    id[f] = 1;
-  REP(i, q.size()) {
-    long u = q[i];
-    for (auto& e: radj[u])
-      if (! id[e.second]) {
-        id[e.second] = 1;
-        q.push_back(e.second);
-      }
-  }
-  if (! id[start]) {
-    start = 0;
-    finals.clear();
-    adj.assign(1, {});
-    return;
-  }
-
-  long j = 0;
-  REP(i, n())
-    id[i] = id[i] ? j++ : -1;
-
-  auto it = finals.begin(), it2 = it;
-  REP(i, n())
-    if (id[i] >= 0) {
-      relate(i);
-      if (start == i)
-        start = id[i];
-      while (it != finals.end() && *it < i)
-        ++it;
-      if (it != finals.end() && *it == i)
-        *it2++ = id[i];
-      long k = 0;
-      for (auto& e: adj[i])
-        if (id[e.second] >= 0)
-          adj[i][k++] = {e.first, id[e.second]};
-      adj[i].resize(k);
-      if (id[i] != i)
-        adj[id[i]] = move(adj[i]);
-    }
-  finals.erase(it2, finals.end());
-  adj.resize(j);
 }

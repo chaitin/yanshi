@@ -54,8 +54,15 @@ static void print_automaton(const Fsa& fsa)
   sgr0(); puts("edges:");
   REP(i, fsa.n()) {
     printf("%ld:", i);
-    for (auto& x: fsa.adj[i])
-      printf(" (%ld,%ld)", x.first, x.second);
+    for (auto it = fsa.adj[i].begin(); it != fsa.adj[i].end(); ) {
+      long from = it->first, to = from, v = it->second;
+      while (++it != fsa.adj[i].end() && it->first == to+1 && it->second == v)
+        to++;
+      if (from == to)
+        printf(" (%ld,%ld)", from, v);
+      else
+        printf(" (%ld-%ld,%ld)", from, to, v);
+    }
     puts("");
   }
   puts("");
@@ -73,9 +80,9 @@ Expr* find_lca(Expr* u, Expr* v)
     return u;
   if (v->depth)
     for (long k = 63-__builtin_clzl(v->depth); k >= 0; k--)
-      if (u->anc[k] != v->anc[k])
+      if (k < u->anc.size() && u->anc[k] != v->anc[k])
         u = u->anc[k], v = v->anc[k];
-  return u->anc[0] == v->anc[0] ? u->anc[0] : NULL;
+  return u->anc[0]; // NULL if two trees
 }
 
 struct Compiler : Visitor<Expr> {
@@ -162,6 +169,9 @@ struct Compiler : Visitor<Expr> {
     visit(*expr.inner);
     st.top().star(&expr);
   }
+  void visit(UnicodeRangeExpr& expr) override {
+    st.push(FsaAnno::unicode_range(expr));
+  }
   void visit(UnionExpr& expr) override {
     visit(*expr.rhs);
     FsaAnno rhs = move(st.top());
@@ -178,6 +188,8 @@ void compile(DefineStmt* stmt)
   Compiler comp;
   comp.visit(*stmt->rhs);
   anno = move(comp.st.top());
+  anno.determinize();
+  anno.minimize();
 }
 
 void compile_actions(DefineStmt* stmt)
@@ -233,10 +245,15 @@ void compile_actions(DefineStmt* stmt)
     fprintf(output, "case %ld:\n", u);
     indent(output, 2);
     fprintf(output, "switch (c) {\n");
-    for (auto& e: anno.fsa.adj[u]) {
-      long v = e.second;
+    for (auto it = anno.fsa.adj[u].begin(); it != anno.fsa.adj[u].end(); ) {
+      long from = it->first, to = from, v = it->second;
+      while (++it != anno.fsa.adj[u].end() && it->first == to+1 && it->second == v)
+        to++;
       indent(output, 2);
-      fprintf(output, "case %ld:\n", e.first);
+      if (from == to)
+        fprintf(output, "case %ld:\n", from);
+      else
+        fprintf(output, "case %ld ... %ld:\n", from, to);
       indent(output, 3);
       fprintf(output, "v = %ld;\n", v);
       auto ie = withins[u].end(), je = withins[v].end();
@@ -355,27 +372,27 @@ void compile_export(DefineStmt* stmt)
   anno.fsa.adj = move(adj);
   anno.assoc = move(assoc);
   anno.deterministic = false;
+  DP(3, "# of states: %ld", anno.fsa.n());
 
   // substring grammar & this nonterminal is not marked as intact
   if (opt_substring_grammar && ! stmt->intact) {
     DP(3, "Constructing substring grammar");
     anno.substring_grammar();
+    DP(3, "# of states: %ld", anno.fsa.n());
   }
 
-  DP(3, "Determinize, minimize, remove dead states");
+  DP(3, "Determinize");
   anno.determinize();
+  DP(3, "# of states: %ld", anno.fsa.n());
+  DP(3, "Minimize");
   anno.minimize();
-  allo = 0;
-  auto relate = [&](long x) {
-    if (allo != x)
-      anno.assoc[allo] = move(anno.assoc[x]);
-    allo++;
-  };
-  anno.fsa.remove_dead(relate);
-  if (anno.fsa.finals.empty()) // 'start' does not produce acceptable strings
-    anno.assoc.assign(1, {});
-  else
-    anno.assoc.resize(allo);
+  DP(3, "# of states: %ld", anno.fsa.n());
+  DP(3, "Keep accessible states");
+  anno.accessible();
+  DP(3, "# of states: %ld", anno.fsa.n());
+  DP(3, "Keep co-accessible states");
+  anno.co_accessible();
+  DP(3, "# of states: %ld", anno.fsa.n());
 
   if (opt_dump_automaton)
     print_automaton(anno.fsa);

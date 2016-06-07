@@ -5,6 +5,7 @@ endif
 syn cluster yanshiCommentGroup contains=yanshiTodo
 syn include @yanshiCcode syntax/cpp.vim
 syn keyword yanshiAction action
+syn keyword yanshiMacro semicolon nosemicolon
 syn keyword yanshiStorageClass export intact
 syn keyword yanshiTodo contained TODO FIXME XXX
 syn match yanshiCpp 'c++'
@@ -18,12 +19,13 @@ syn match yanshiLowOp '[-&|]'
 syn match yanshiSpecial display contained "\\\(x\x\x\|.\|$\)"
 syn region yanshiBrace matchgroup=Delimiter start='{' end='}' fold contains=@yanshiCcode
 syn region yanshiBracket start='\[' skip=+\\\\\|\\]+ end=']'
-syn region yanshiComment start="#" skip='\\$' end='$' keepend contains=@yanshiCommentGroup,@Spell
+syn region yanshiComment start='/\*' end='\*/' keepend contains=@yanshiCommentGroup,@Spell
 syn region yanshiImported display contained start="+" skip=+\\\\\|\\"+ end=+"+
+syn region yanshiLineComment start='#\|//' skip='\\$' end='$' keepend contains=@yanshiCommentGroup,@Spell
 syn region yanshiQQString start=+"+ skip=+\\.+ end=+"+ contains=yanshiSpecial
 syn region yanshiQString start=+'+ skip=+\\.+ end=+'+
 
-syn region yanshiDefineStmt start='^\w\+\s*=' end='$' skipnl contains=@yanshiExpr,yanshiComment,yanshiParen0
+syn region yanshiDefineStmt start='^\w\+\s*[=:]' end='$' skipnl contains=@yanshiExpr,yanshiComment,yanshiLineComment,yanshiParen0
 
 syn cluster yanshiExpr contains=yanshiActionOperator,yanshiBrace,yanshiBracket,yanshiCollapse,yanshiIdent,yanshiHighOp,yanshiLowOp,yanshiQString,yanshiQQString,
 sy region yanshiParen0 matchgroup=yanshiParen0 start='(' end=')' contains=@yanshiExpr,yanshiParen1
@@ -52,7 +54,9 @@ hi def link yanshiComment        Comment
 hi def link yanshiHighOp         Operator
 hi def link yanshiImport         Include
 hi def link yanshiImported       String
+hi def link yanshiLineComment    Comment
 hi def link yanshiLowOp          Conditional
+hi def link yanshiMacro          Macro
 hi def link yanshiQQString       String
 hi def link yanshiQString        String
 hi def link yanshiSpecial        SpecialChar

@@ -52,6 +52,7 @@ struct PlusExpr;
 struct RepeatExpr;
 struct QuestionExpr;
 struct StarExpr;
+struct UnicodeRangeExpr;
 struct UnionExpr;
 template<>
 struct Visitor<Expr> {
@@ -70,6 +71,7 @@ struct Visitor<Expr> {
   virtual void visit(RepeatExpr&) = 0;
   virtual void visit(QuestionExpr&) = 0;
   virtual void visit(StarExpr&) = 0;
+  virtual void visit(UnicodeRangeExpr&) = 0;
   virtual void visit(UnionExpr&) = 0;
 };
 
@@ -224,6 +226,11 @@ struct StarExpr : Visitable<Expr, StarExpr> {
   ~StarExpr() {
     delete inner;
   }
+};
+
+struct UnicodeRangeExpr : Visitable<Expr, UnicodeRangeExpr> {
+  long start, end;
+  UnicodeRangeExpr(long start, long end) : start(start), end(end) {}
 };
 
 struct UnionExpr : Visitable<Expr, UnionExpr> {
@@ -413,6 +420,13 @@ struct StmtPrinter : Visitor<Action>, Visitor<Expr>, Visitor<Stmt> {
     visit(*expr.inner);
     depth--;
   }
+  void visit(UnicodeRangeExpr& expr) override {
+    printf("%*s%s\n", 2*depth, "", "UnicodeRangeExpr");
+    indent(stdout, depth+1);
+    printf("[%ld,%ld)\n", expr.start, expr.end);
+    depth++;
+    depth--;
+  }
   void visit(UnionExpr& expr) override {
     printf("%*s%s\n", 2*depth, "", "UnionExpr");
     depth++;
@@ -506,6 +520,7 @@ struct PrePostActionExprStmtVisitor : Visitor<Action>, Visitor<Expr>, Visitor<St
   void visit(RepeatExpr& expr) override { visit(*expr.inner); }
   void visit(QuestionExpr& expr) override { visit(*expr.inner); }
   void visit(StarExpr& expr) override { visit(*expr.inner); }
+  void visit(UnicodeRangeExpr& expr) override {}
   void visit(UnionExpr& expr) override {
     visit(*expr.lhs);
     visit(*expr.rhs);

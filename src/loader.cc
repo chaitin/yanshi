@@ -271,10 +271,12 @@ static vector<DefineStmt*> topo_define_stmts(long& n_errors)
 {
   vector<DefineStmt*> topo;
   vector<DefineStmt*> st;
-  unordered_map<DefineStmt*, i8> vis; // 0: unvisited; 1: in stack: 2: visited
+  unordered_map<DefineStmt*, i8> vis; // 0: unvisited; 1: in stack; 2: visited; 3: in a cycle
   function<bool(DefineStmt*)> dfs = [&](DefineStmt* u) {
     if (vis[u] == 2)
       return false;
+    if (vis[u] == 3)
+      return true;
     if (vis[u] == 1) {
       u->module->locfile.error_context(u->loc, "'%s': circular embedding", u->lhs.c_str());
       long i = st.size();
@@ -282,6 +284,7 @@ static vector<DefineStmt*> topo_define_stmts(long& n_errors)
         i--;
       st.push_back(st[i-1]);
       for (; i < st.size(); i++) {
+        vis[st[i]] = 3;
         fputs("  ", stderr);
         st[i]->module->locfile.error_context(st[i]->loc, "required by %s", st[i]->lhs.c_str());
       }
@@ -290,19 +293,18 @@ static vector<DefineStmt*> topo_define_stmts(long& n_errors)
     }
     vis[u] = 1;
     st.push_back(u);
+    bool cycle = false;
     for (auto v: depended_by[u])
       if (dfs(v))
-        return true;
+        cycle = true;
     st.pop_back();
     vis[u] = 2;
     topo.push_back(u);
-    return false;
+    return cycle;
   };
   for (auto& d: depended_by)
-    if (dfs(d.first)) { // detected cycle
+    if (dfs(d.first)) // detected cycle
       n_errors++;
-      return topo;
-    }
   reverse(ALL(topo));
   return topo;
 }

@@ -7,6 +7,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <string>
+#include <unicode/utf8.h>
 using namespace std;
 
 #define YY_USER_ACTION                      \
@@ -19,6 +20,8 @@ using namespace std;
 static int my_top_state(yyscan_t yyscanner);
 
 static string tmp_bracket, tmp_str;
+
+static bool semicolon;
 
 static void unexpected_eof(YYSTYPE* yylval, const char* token_end)
 {
@@ -38,10 +41,11 @@ static void unexpected_newline(YYSTYPE* yylval, const char* token_end)
 %option prefix="raw_yy"
 %option stack
 
-%x IN_ACTION
-%x IN_ACTION_OP
+%x EXPECT_CODE
+%x EXPECT_ACTION
 %x IN_BRACE
 %x IN_CODE
+%x IN_COMMENT
 %x IN_BRACKET
 %x IN_BRACKET_FIRST
 %x IN_LINE_COMMENT
@@ -50,28 +54,40 @@ static void unexpected_newline(YYSTYPE* yylval, const char* token_end)
 %x IN_QQ_STRING
 
 D			[0-9]
+H			[0-9A-Fa-f]
 L			[a-zA-Z_\x80-\xff]
 
 %%
 
-";" {}
 "::" return SEMISEMI;
-[-~!&*=+,.?|{}] return yytext[0];
-"action" yy_push_state(IN_ACTION, yyscanner); return ACTION;
+".." return DOTDOT;
+";" if (semicolon) return '\n';
+[-~!&*=+,.?|{}:] return yytext[0];
+"action" yy_push_state(EXPECT_CODE, yyscanner); return ACTION;
 "as" return AS;
-"c++" return CPP;
+"c++" yy_push_state(EXPECT_CODE, yyscanner); return CPP;
 "epsilon" return EPSILON;
 "export" return EXPORT;
 "import" return IMPORT;
 "intact" return INTACT;
+"semicolon" semicolon = true;
+"nosemicolon" semicolon = false;
 {L}({L}|{D})* yylval->str = new string(yytext); return IDENT;
 {D}+ yylval->integer = atol(yytext); return INTEGER;
 
 "#" yy_push_state(IN_LINE_COMMENT, yyscanner);
+"//" yy_push_state(IN_LINE_COMMENT, yyscanner);
 <IN_LINE_COMMENT>{
   "\n" yy_pop_state(yyscanner);
   <<EOF>> yy_pop_state(yyscanner);
   . {}
+}
+
+"/*" yy_push_state(IN_COMMENT, yyscanner);
+<IN_COMMENT>{
+  "*/" yy_pop_state(yyscanner);
+  <<EOF>> yy_pop_state(yyscanner);
+  .|\n {}
 }
 
 "(" yy_push_state(IN_PAREN, yyscanner); return '(';
@@ -132,7 +148,7 @@ L			[a-zA-Z_\x80-\xff]
   <<EOF>> yy_pop_state(yyscanner); unexpected_eof(yylval, "]");
 }
 
-<IN_ACTION>{
+<EXPECT_CODE>{
   {L}({L}|{D})* yylval->str = new string(yytext); return IDENT;
   "{" BEGIN IN_CODE; tmp_bracket.clear();
   [ \t]+ {}
@@ -140,8 +156,8 @@ L			[a-zA-Z_\x80-\xff]
   <<EOF>> yy_pop_state(yyscanner);
 }
 
-[>@%$] yy_push_state(IN_ACTION_OP, yyscanner); return yytext[0];
-<IN_ACTION_OP>{
+[>@%$] yy_push_state(EXPECT_ACTION, yyscanner); return yytext[0];
+<EXPECT_ACTION>{
   {L}({L}|{D})* yy_pop_state(yyscanner); yylval->str = new string(yytext); return IDENT;
   "{" BEGIN IN_CODE; tmp_bracket.clear();
   [ \t\n]+ {}
@@ -164,9 +180,10 @@ L			[a-zA-Z_\x80-\xff]
   <<EOF>> yy_pop_state(yyscanner); unexpected_eof(yylval, "}");
 }
 
-"'" tmp_str.clear(); yy_push_state(IN_Q_STRING, yyscanner);
+' tmp_str.clear(); yy_push_state(IN_Q_STRING, yyscanner);
+"\"" tmp_str.clear(); yy_push_state(IN_QQ_STRING, yyscanner);
 <IN_Q_STRING>{
-  "'" {
+  ' {
     yy_pop_state(yyscanner);
     if (YY_START == INITIAL || YY_START == IN_PAREN) {
       yylval->str = new string(tmp_str);
@@ -174,13 +191,8 @@ L			[a-zA-Z_\x80-\xff]
     }
     tmp_bracket += yytext;
   }
-  \\' tmp_str += '\''; tmp_bracket += yytext;
-  \\\\ tmp_str += '\\'; tmp_bracket += yytext;
-  .|\n tmp_str += yytext[0]; tmp_bracket += yytext[0];
   <<EOF>> yy_pop_state(yyscanner); unexpected_eof(yylval, "'");
 }
-
-"\"" tmp_str.clear(); yy_push_state(IN_QQ_STRING, yyscanner);
 <IN_QQ_STRING>{
   "\"" {
     yy_pop_state(yyscanner);
@@ -190,6 +202,10 @@ L			[a-zA-Z_\x80-\xff]
     }
     tmp_bracket += yytext;
   }
+  <<EOF>> yy_pop_state(yyscanner); unexpected_eof(yylval, "\"");
+}
+
+<IN_Q_STRING,IN_QQ_STRING>{
   \\[0-7]{1,3} {
     long c = strtol(yytext+1, NULL, 8);
     if (UCHAR_MAX < c) {
@@ -208,6 +224,28 @@ L			[a-zA-Z_\x80-\xff]
     tmp_str.push_back(c);
     tmp_bracket += yytext;
   }
+  \\u[0-9a-fA-F]+ {
+    char s[4];
+    long c = strtol(yytext+2, NULL, 16), len = 0;
+    if (UINT16_MAX < c) {
+      yylval->errmsg = aprintf("Invalid number after \\-escape: %s", yytext+1);
+      return INVALID_CHARACTER;
+    }
+    U8_APPEND_UNSAFE(s, len, c);
+    tmp_str.insert(tmp_str.end(), s, s+len);
+    tmp_bracket += yytext;
+  }
+  \\U[0-9a-fA-F]+ {
+    char s[4];
+    long c = strtol(yytext+2, NULL, 16), len = 0;
+    if (UINT32_MAX < c) {
+      yylval->errmsg = aprintf("Invalid number after \\-escape: %s", yytext+1);
+      return INVALID_CHARACTER;
+    }
+    U8_APPEND_UNSAFE(s, len, c);
+    tmp_str.insert(tmp_str.end(), s, s+len);
+    tmp_bracket += yytext;
+  }
   \\a tmp_str += '\a'; tmp_bracket += yytext;
   \\b tmp_str += '\b'; tmp_bracket += yytext;
   \\f tmp_str += '\f'; tmp_bracket += yytext;
@@ -221,9 +259,8 @@ L			[a-zA-Z_\x80-\xff]
     return INVALID_CHARACTER;
   }
   .|\n tmp_str += yytext[0]; tmp_bracket += yytext[0];
-  <<EOF>> unexpected_eof(yylval, "\""); BEGIN INITIAL;
 }
 
-"\n" if (YY_START == INITIAL) return '\n';
+"\n" if (YY_START == INITIAL && ! semicolon) return '\n';
 [ \t]+ {}
 . { yylval->errmsg = strdup("Invalid character"); return INVALID_CHARACTER; }
