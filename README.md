@@ -16,6 +16,10 @@
 
 `yanshi a.ys -o a.cc`
 
+## 语法
+
+### 支持`:`，兼容ANTLR很多语法
+
 ## contrib
 
 ### Vim

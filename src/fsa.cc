@@ -5,6 +5,7 @@
 #include <limits.h>
 #include <queue>
 #include <set>
+#include <stack>
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
@@ -256,19 +257,26 @@ Fsa Fsa::intersect(const Fsa& rhs, function<void(long, long)> relate) const
 Fsa Fsa::determinize(function<void(const vector<long>&)> relate) const
 {
   Fsa r;
+  r.start = 0;
   unordered_map<vector<long>, long> m;
-  vector<vector<long>> q{{start}};
   vector<vector<pair<long, long>>::const_iterator> its(n());
   vector<long> vs;
-  epsilon_closure(q[0]);
-  m[q[0]] = 0;
-  r.start = 0;
-  REP(i, q.size()) {
-    if (i%100==0)
-    DP(5, "%ld %ld", i, q[i].size());
-    relate(q[i]);
+  vector<long> initial{start};
+  epsilon_closure(initial);
+  m[initial] = 0;
+  stack<vector<long>> st;
+  st.push(move(initial));
+  while (st.size()) {
+    vector<long> x = move(st.top());
+    st.pop();
+    long id = m[x];
+    if (id+1 > r.adj.size())
+      r.adj.resize(id+1);
+    relate(x);
+    if (id % 100 == 0)
+      DP(5, "%ld %ld", id, x.size());
     bool final = false;
-    for (long u: q[i]) {
+    for (long u: x) {
       if (is_final(u))
         final = true;
       its[u] = adj[u].begin();
@@ -277,18 +285,17 @@ Fsa Fsa::determinize(function<void(const vector<long>&)> relate) const
         ++its[u];
     }
     if (final)
-      r.finals.push_back(i);
-    r.adj.emplace_back();
+      r.finals.push_back(id);
     for(;;) {
       // find minimum transition
       long c = LONG_MAX;
-      for (long u: q[i])
+      for (long u: x)
         if (its[u] != adj[u].end())
           c = min(c, its[u]->first);
       if (c == LONG_MAX) break;
       // successors
       vs.clear();
-      for (long u: q[i])
+      for (long u: x)
         for (; its[u] != adj[u].end() && its[u]->first == c; ++its[u])
           vs.push_back(its[u]->second);
       sort(ALL(vs));
@@ -297,11 +304,12 @@ Fsa Fsa::determinize(function<void(const vector<long>&)> relate) const
       auto mit = m.find(vs);
       if (mit == m.end()) {
         mit = m.emplace(vs, m.size()).first;
-        q.push_back(vs);
+        st.push(vs);
       }
-      r.adj[i].emplace_back(c, mit->second);
+      r.adj[id].emplace_back(c, mit->second);
     }
   }
+  sort(ALL(r.finals));
   return r;
 }
 
