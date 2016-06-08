@@ -113,9 +113,10 @@ void FsaAnno::determinize() {
   if (deterministic)
     return;
   decltype(assoc) new_assoc;
-  auto relate = [&](const vector<long>& xs) {
-    new_assoc.emplace_back();
-    auto& as = new_assoc.back();
+  auto relate = [&](long id, const vector<long>& xs) {
+    if (id+1 > new_assoc.size())
+      new_assoc.resize(id+1);
+    auto& as = new_assoc[id];
     for (long x: xs)
       as.insert(as.end(), ALL(assoc[x]));
     sort_assoc(as);
@@ -128,8 +129,10 @@ void FsaAnno::determinize() {
 void FsaAnno::difference(FsaAnno& rhs, DifferenceExpr* expr) {
   vector<vector<long>> rel0;
   decltype(rhs.assoc) new_assoc;
-  auto relate0 = [&](const vector<long>& xs) {
-    rel0.emplace_back(xs);
+  auto relate0 = [&](long id, const vector<long>& xs) {
+    if (id+1 > rel0.size())
+      rel0.resize(id+1);
+    rel0[id] = xs;
   };
   auto relate = [&](long x) {
     if (rel0.empty())
@@ -145,7 +148,7 @@ void FsaAnno::difference(FsaAnno& rhs, DifferenceExpr* expr) {
   if (! deterministic)
     fsa = fsa.determinize(relate0);
   if (! rhs.deterministic)
-    rhs.fsa = rhs.fsa.determinize([](const vector<long>&) {});
+    rhs.fsa = rhs.fsa.determinize([](long, const vector<long>&) {});
   fsa = fsa.difference(rhs.fsa, relate);
   assoc = move(new_assoc);
   if (expr)
@@ -168,11 +171,15 @@ FsaAnno FsaAnno::epsilon(EpsilonExpr* expr) {
 void FsaAnno::intersect(FsaAnno& rhs, IntersectExpr* expr) {
   decltype(rhs.assoc) new_assoc;
   vector<vector<long>> rel0, rel1;
-  auto relate0 = [&](const vector<long>& xs) {
-    rel0.emplace_back(xs);
+  auto relate0 = [&](long id, const vector<long>& xs) {
+    if (id+1 > rel0.size())
+      rel0.resize(id+1);
+    rel0[id] = xs;
   };
-  auto relate1 = [&](const vector<long>& xs) {
-    rel1.emplace_back(xs);
+  auto relate1 = [&](long id, const vector<long>& xs) {
+    if (id+1 > rel1.size())
+      rel1.resize(id+1);
+    rel1[id] = xs;
   };
   auto relate = [&](long x, long y) {
     new_assoc.emplace_back();

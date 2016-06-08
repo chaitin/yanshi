@@ -93,17 +93,20 @@ Fsa Fsa::operator~() const
 
 void Fsa::accessible(function<void(long)> relate)
 {
-  long nid = 0;
-  vector<long> q{start}, id(n(), -1);
-  id[start] = nid++;
+  vector<long> q{start}, id(n(), 0);
+  id[start] = 1;
   REP(i, q.size()) {
     long u = q[i];
     for (auto& e: adj[u])
-      if (id[e.second] < 0) {
-        id[e.second] = nid++;
+      if (! id[e.second]) {
+        id[e.second] = 1;
         q.push_back(e.second);
       }
   }
+
+  long j = 0;
+  REP(i, n())
+    id[i] = id[i] ? j++ : -1;
 
   auto it = finals.begin(), it2 = it;
   REP(i, n())
@@ -124,7 +127,7 @@ void Fsa::accessible(function<void(long)> relate)
         adj[id[i]] = move(adj[i]);
     }
   finals.erase(it2, finals.end());
-  adj.resize(nid);
+  adj.resize(j);
 }
 
 void Fsa::co_accessible(function<void(long)> relate)
@@ -254,25 +257,24 @@ Fsa Fsa::intersect(const Fsa& rhs, function<void(long, long)> relate) const
   return r;
 }
 
-Fsa Fsa::determinize(function<void(const vector<long>&)> relate) const
+Fsa Fsa::determinize(function<void(long, const vector<long>&)> relate) const
 {
   Fsa r;
   r.start = 0;
   unordered_map<vector<long>, long> m;
   vector<vector<pair<long, long>>::const_iterator> its(n());
-  vector<long> vs;
-  vector<long> initial{start};
-  epsilon_closure(initial);
-  m[initial] = 0;
+  vector<long> vs{start};
+  epsilon_closure(vs);
+  m[vs] = 0;
   stack<vector<long>> st;
-  st.push(move(initial));
+  st.push(move(vs));
   while (st.size()) {
     vector<long> x = move(st.top());
     st.pop();
     long id = m[x];
     if (id+1 > r.adj.size())
       r.adj.resize(id+1);
-    relate(x);
+    relate(id, x);
     if (id % 100 == 0)
       DP(5, "%ld %ld", id, x.size());
     bool final = false;

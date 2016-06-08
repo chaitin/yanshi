@@ -94,7 +94,6 @@ struct Visitor<Stmt> {
 //// Action
 
 struct Action : VisitableBase<Action> {
-
   Location loc;
   virtual ~Action() = default;
 };
@@ -346,7 +345,7 @@ struct StmtPrinter : Visitor<Action>, Visitor<Expr>, Visitor<Stmt> {
     printf("%*s%s\n", 2*depth, "", "CollapseExpr");
     printf("%*s", 2*(depth+1), "");
     if (expr.qualified.size())
-      printf("%s.%s\n", expr.qualified.c_str(), expr.ident.c_str());
+      printf("%s::%s\n", expr.qualified.c_str(), expr.ident.c_str());
     else
       printf("%s\n", expr.ident.c_str());
   }
@@ -377,7 +376,7 @@ struct StmtPrinter : Visitor<Action>, Visitor<Expr>, Visitor<Stmt> {
     printf("%*s%s\n", 2*depth, "", "EmbedExpr");
     printf("%*s", 2*(depth+1), "");
     if (expr.qualified.size())
-      printf("%s.%s\n", expr.qualified.c_str(), expr.ident.c_str());
+      printf("%s::%s\n", expr.qualified.c_str(), expr.ident.c_str());
     else
       printf("%s\n", expr.ident.c_str());
   }
@@ -393,7 +392,7 @@ struct StmtPrinter : Visitor<Action>, Visitor<Expr>, Visitor<Stmt> {
   }
   void visit(LiteralExpr& expr) override {
     printf("%*s%s\n", 2*depth, "", "LiteralExpr");
-    printf("%*s%s\n", 2*(depth+1), "", expr.literal.c_str()); // TODO NUL
+    printf("%*s%s\n", 2*(depth+1), "", expr.literal.c_str());
   }
   void visit(PlusExpr& expr) override {
     printf("%*s%s\n", 2*depth, "", "PlusExpr");

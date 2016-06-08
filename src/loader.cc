@@ -303,7 +303,7 @@ static vector<DefineStmt*> topo_define_stmts(long& n_errors)
     return cycle;
   };
   for (auto& d: depended_by)
-    if (dfs(d.first)) // detected cycle
+    if (! vis[d.first] && dfs(d.first)) // detected cycle
       n_errors++;
   reverse(ALL(topo));
   return topo;

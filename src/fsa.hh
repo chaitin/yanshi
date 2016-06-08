@@ -27,5 +27,5 @@ struct Fsa {
   // DFA -> DFA
   Fsa distinguish(function<void(vector<long>&)> relate) const;
   // * -> DFA
-  Fsa determinize(function<void(const vector<long>&)> relate) const;
+  Fsa determinize(function<void(long, const vector<long>&)> relate) const;
 };

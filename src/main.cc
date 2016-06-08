@@ -27,7 +27,9 @@ void print_help(FILE *fh)
         "  --dump-automaton          dump automata\n"
         "  --dump-module             dump module use/def/...\n"
         "  --dump-tree               dump AST\n"
+        "  -G,--graph <dir>          output a Graphviz dot file\n"
         "  -I,--import <dir>         add <dir> to search path for 'import'\n"
+        "  -S,--standalone           generate header and 'main()'\n"
         "  --substring-grammar       construct regular approximation of the substring grammar. Inner states of nonterminals labeled 'intact' are not connected to start/final\n"
         "  -o,--output <file>        .cc output filename\n"
         "  -h, --help                display this help and exit\n"
@@ -51,16 +53,13 @@ int main(int argc, char *argv[])
     {"dump-tree",           no_argument,       0,   1004},
     {"graph",               no_argument,       0,   'G'},
     {"import",              required_argument, 0,   'I'},
+    {"standalone",          no_argument,       0,   'S'},
     {"substring-grammar",   no_argument,       0,   's'},
     {"output",              required_argument, 0,   'o'},
     {0,                     0,                 0,   0},
   };
 
-#ifdef DEBUG
-  opt_dump_assoc = opt_dump_automaton = true;
-#endif
-
-  while ((opt = getopt_long(argc, argv, "Dcd:GhI:l:o:s", long_options, NULL)) != -1) {
+  while ((opt = getopt_long(argc, argv, "Dcd:GhI:l:o:Ss", long_options, NULL)) != -1) {
     switch (opt) {
     case 'D':
       break;
@@ -88,6 +87,9 @@ int main(int argc, char *argv[])
       break;
     case 'o':
       opt_output_filename = optarg;
+      break;
+    case 'S':
+      opt_standalone = true;
       break;
     case 's':
       opt_substring_grammar = true;
