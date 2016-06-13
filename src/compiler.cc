@@ -188,8 +188,8 @@ void compile(DefineStmt* stmt)
   Compiler comp;
   comp.visit(*stmt->rhs);
   anno = move(comp.st.top());
-  anno.determinize();
-  anno.minimize();
+  //anno.determinize();
+  //anno.minimize();
 }
 
 void compile_actions(DefineStmt* stmt)
@@ -258,7 +258,7 @@ void compile_actions(DefineStmt* stmt)
       fprintf(output, "v = %ld;\n", v);
       auto ie = withins[u].end(), je = withins[v].end();
 
-      // leaving = {u} - {v}
+      // leaving = Expr(u) - Expr(v)
       for (auto i = withins[u].begin(), j = withins[v].begin(); i != ie; ++i) {
         while (j != je && i->first > j->first)
           ++j;
@@ -270,7 +270,7 @@ void compile_actions(DefineStmt* stmt)
           }
       }
 
-      // entering = {v} - {u}
+      // entering = Expr(v) - Expr(u)
       for (auto i = withins[u].begin(), j = withins[v].begin(); j != je; ++j) {
         while (i != ie && i->first < j->first)
           ++i;
@@ -282,22 +282,29 @@ void compile_actions(DefineStmt* stmt)
           }
       }
 
-      // transiting = {v}
-      for (auto j = withins[v].begin(); j != je; ++j)
-        for (auto action: j->first->transiting) {
-          D("$");
-          indent(output, 3);
-          fprintf(output, "{%s}\n", get_code(action).c_str());
-        }
+      // transiting = intersect(Expr(u), Expr(v))
+      for (auto i = withins[u].begin(), j = withins[v].begin(); j != je; ++j) {
+        while (i != ie && i->first < j->first)
+          ++i;
+        if (i != ie && i->first == j->first)
+          for (auto action: j->first->transiting) {
+            D("$");
+            indent(output, 3);
+            fprintf(output, "{%s}\n", get_code(action).c_str());
+          }
+      }
 
-      // finishing = {v} if final
-      for (auto j = withins[v].begin(); j != je; ++j)
-        if (long(j->second) & long(ExprTag::final))
+      // finishing = intersect(Expr(u), Expr(v)) & Expr(v).has_final(v)
+      for (auto i = withins[u].begin(), j = withins[v].begin(); j != je; ++j) {
+        while (i != ie && i->first < j->first)
+          ++i;
+        if (i != ie && i->first == j->first && long(j->second) & long(ExprTag::final))
           for (auto action: j->first->finishing) {
             D("@");
             indent(output, 3);
             fprintf(output, "{%s}\n", get_code(action).c_str());
           }
+      }
 
       indent(output, 3);
       fprintf(output, "break;\n");
@@ -340,22 +347,22 @@ void compile_export(DefineStmt* stmt)
     assoc.insert(assoc.end(), ALL(anno.assoc));
     assoc.emplace_back();
     FOR(i, old, old+anno.fsa.n())
-      if (anno.fsa.has(i-old, AB)) {
+      if (anno.fsa.has_special(i-old)) {
         for (auto aa: assoc[i])
           if (auto e = dynamic_cast<CollapseExpr*>(aa.first)) {
             DefineStmt* v = e->define_stmt;
             allocate_collapse(v);
-            // (i@{CollapseExpr,...}, AB, _) -> ({CollapseExpr,...}, epsilon, CollapseExpr.define_stmt.start)
+            // (i@{CollapseExpr,...}, special, _) -> ({CollapseExpr,...}, epsilon, CollapseExpr.define_stmt.start)
             sorted_insert(adj[i], make_pair(-1L, stmt2offset[v]+compiled[v].fsa.start));
           }
         long j = adj[i].size();
-        while (j && adj[i][j-1].first == AB) {
+        while (j && adj[i][j-1].first >= AB) {
           long v = adj[i][--j].second;
           for (auto aa: assoc[v])
             if (auto e = dynamic_cast<CollapseExpr*>(aa.first)) {
               DefineStmt* w = e->define_stmt;
               allocate_collapse(w);
-              // (_, AB, v@{CollapseExpr,...}) -> (CollapseExpr.define_stmt.final, epsilon, v)
+              // (_, special, v@{CollapseExpr,...}) -> (CollapseExpr.define_stmt.final, epsilon, v)
               for (long f: compiled[w].fsa.finals) {
                 long g = stmt2offset[w]+f;
                 sorted_insert(adj[g], make_pair(-1L, v));
@@ -364,7 +371,7 @@ void compile_export(DefineStmt* stmt)
               }
             }
         }
-        // remove (i, AB, _)
+        // remove (i, special, _)
         adj[i].resize(j);
       }
   };

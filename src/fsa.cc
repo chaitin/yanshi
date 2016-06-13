@@ -2,6 +2,7 @@
 #include "fsa.hh"
 
 #include <algorithm>
+#include <bitset>
 #include <limits.h>
 #include <queue>
 #include <set>
@@ -28,8 +29,13 @@ namespace std
 
 bool Fsa::has(long u, long a) const
 {
-  auto it = lower_bound(ALL(adj[u]), make_pair(a, 0L));
+  auto it = lower_bound(ALL(adj[u]), make_pair(a, LONG_MIN));
   return it != adj[u].end() && it->first == a;
+}
+
+bool Fsa::has_special(long u) const
+{
+  return lower_bound(ALL(adj[u]), make_pair(AB, LONG_MIN)) != adj[u].end();
 }
 
 bool Fsa::is_final(long x) const
@@ -323,9 +329,10 @@ Fsa Fsa::distinguish(function<void(vector<long>&)> relate) const
       radj[e.second].emplace_back(e.first, i);
   REP(i, n())
     sort(ALL(radj[i]));
-
   vector<long> L(n()), R(n()), B(n()), C(n(), 0), CC(n(), 0);
   vector<bool> mark(n(), false);
+
+  // distinguish finals & non-finals
   long fx = -1, x = -1, fy = -1, y = -1, j = 0;
   REP(i, n())
     if (j < finals.size() && finals[j] == i) {
@@ -350,12 +357,30 @@ Fsa Fsa::distinguish(function<void(vector<long>&)> relate) const
     L[fx] = x, R[x] = fx;
   if (y >= 0)
     L[fy] = y, R[y] = fy;
+
   set<pair<long, long>> refines;
+  auto labels = [&](long fx) {
+    vector<long> lb;
+    for (long x = fx; ; ) {
+      for (auto& e: radj[x])
+        if (e.first >= 0)
+          lb.push_back(e.first);
+      if ((x = R[x]) == fx) break;
+    }
+    sort(ALL(lb));
+    lb.erase(unique(ALL(lb)), lb.end());
+    return lb;
+  };
+
   if (fx >= 0)
-    REP(a, AB+1)
+    //REP(a, AB+1)
+    //  refines.emplace(a, fx);
+    for (long a: labels(fx))
       refines.emplace(a, fx);
   if (fy >= 0)
-    REP(a, AB+1)
+    //REP(a, AB+1)
+    //  refines.emplace(a, fy);
+    for (long a: labels(fy))
       refines.emplace(a, fy);
   while (refines.size()) {
     long a;
@@ -379,6 +404,7 @@ Fsa Fsa::distinguish(function<void(vector<long>&)> relate) const
       if (CC[fy] < C[fy]) {
         long fu = -1, u = -1, cu = 0,
              fv = -1, v = -1, cv = 0;
+        vector<long> lb = labels(fy);
         for (long i = fy; ; ) {
           if (mark[i]) {
             mark[i] = false;
@@ -404,7 +430,8 @@ Fsa Fsa::distinguish(function<void(vector<long>&)> relate) const
         }
         L[fu] = u, R[u] = fu;
         L[fv] = v, R[v] = fv;
-        REP(a, AB+1)
+        //REP(a, AB+1)
+        for (long a: lb)
           if (refines.count({a, fy}))
             refines.emplace(a, fu != fy ? fu : fv);
           else
