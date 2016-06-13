@@ -1,5 +1,6 @@
 #include "common.hh"
 #include "fsa_anno.hh"
+#include "option.hh"
 
 #include <algorithm>
 #include <limits.h>
@@ -313,8 +314,8 @@ FsaAnno FsaAnno::bracket(BracketExpr& expr) {
   r.fsa.start = 0;
   r.fsa.finals = {1};
   r.fsa.adj.resize(2);
-  REP(c, AB)
-    if (expr.charset[c])
+  for (auto& x: expr.intervals.to)
+    FOR(c, x.first, x.second)
       r.fsa.adj[0].emplace_back(c, 1);
   r.assoc.resize(2);
   r.add_assoc(expr);

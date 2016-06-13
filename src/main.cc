@@ -56,10 +56,11 @@ int main(int argc, char *argv[])
     {"standalone",          no_argument,       0,   'S'},
     {"substring-grammar",   no_argument,       0,   's'},
     {"output",              required_argument, 0,   'o'},
+    {"unicode",             no_argument,       0,   'u'},
     {0,                     0,                 0,   0},
   };
 
-  while ((opt = getopt_long(argc, argv, "Dcd:GhI:l:o:Ss", long_options, NULL)) != -1) {
+  while ((opt = getopt_long(argc, argv, "Dcd:GhI:l:o:Ssu", long_options, NULL)) != -1) {
     switch (opt) {
     case 'D':
       break;
@@ -93,6 +94,9 @@ int main(int argc, char *argv[])
       break;
     case 's':
       opt_substring_grammar = true;
+      break;
+    case 'u':
+      AB = 0x110000;
       break;
     case 1000: opt_dump_action = true; break;
     case 1001: opt_dump_assoc = true; break;

@@ -1,4 +1,5 @@
 #include "common.hh"
+#include "option.hh"
 
 #include <errno.h>
 #include <execinfo.h>
@@ -160,4 +161,23 @@ void yellow() { if (isatty(2)) fputs(YELLOW, stderr); }
 void indent(FILE* f, int d)
 {
   fprintf(f, "%*s", 2*d, "");
+}
+
+void DisjointIntervals::flip() {
+  long i = 0;
+  map<long, long> to2;
+  for (auto &x: to) {
+    if (i < x.first)
+      to2.emplace(i, x.first);
+    i = x.second;
+  }
+  if (i < AB)
+    to2.emplace(i, AB);
+  to = move(to2);
+}
+
+void DisjointIntervals::print() {
+  for (auto& x: to)
+    printf("(%ld,%ld) ", x.first, x.second);
+  puts("");
 }

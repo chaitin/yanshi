@@ -3,10 +3,8 @@
 #include "location.hh"
 
 #include <string.h>
-#include <bitset>
 #include <string>
 #include <vector>
-using std::bitset;
 using std::string;
 using std::vector;
 
@@ -134,8 +132,8 @@ struct Expr : VisitableBase<Expr> {
 };
 
 struct BracketExpr : Visitable<Expr, BracketExpr> {
-  bitset<AB> charset;
-  BracketExpr(bitset<AB>* charset) : charset(*charset) { delete charset; }
+  DisjointIntervals intervals;
+  BracketExpr(DisjointIntervals* intervals) : intervals(std::move(*intervals)) { delete intervals; }
 };
 
 struct CollapseExpr : Visitable<Expr, CollapseExpr> {
@@ -331,14 +329,8 @@ struct StmtPrinter : Visitor<Action>, Visitor<Expr>, Visitor<Stmt> {
   void visit(BracketExpr& expr) override {
     printf("%*s%s\n", 2*depth, "", "BracketExpr");
     printf("%*s", 2*(depth+1), "");
-    for (long i = 0, j; i < expr.charset.size(); )
-      if (! expr.charset[i])
-        i++;
-      else {
-        for (j = i; j < expr.charset.size() && expr.charset[j]; j++);
-        printf(" %ld-%ld", i, j-1);
-        i = j;
-      }
+    for (auto& x: expr.intervals.to)
+      printf("(%ld,%ld) ", x.first, x.second);
     puts("");
   }
   void visit(CollapseExpr& expr) override {

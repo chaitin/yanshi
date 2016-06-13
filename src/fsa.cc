@@ -1,8 +1,8 @@
 #include "common.hh"
 #include "fsa.hh"
+#include "option.hh"
 
 #include <algorithm>
-#include <bitset>
 #include <limits.h>
 #include <queue>
 #include <set>

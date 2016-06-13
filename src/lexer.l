@@ -1,7 +1,8 @@
 %{
+#include "lexer_helper.hh"
+#include "option.hh"
 #include "parser.hh"
 #include "syntax.hh"
-#include "lexer_helper.hh"
 
 #include <climits>
 #include <cstdlib>
@@ -23,15 +24,51 @@ static string tmp_bracket, tmp_str;
 
 static bool semicolon;
 
+static long invalid_escape(YYSTYPE* yylval, const char* text)
+{
+  yylval->errmsg = aprintf("invalid \\-escape: %s", text);
+  return INVALID_CHARACTER;
+}
+
+static int invalid_escape_octonary(YYSTYPE* yylval, const char* text)
+{
+  yylval->errmsg = aprintf("invalid number after \\-escape: %s", text);
+  return INVALID_CHARACTER;
+}
+
+static int invalid_escape_x(YYSTYPE* yylval, const char* text)
+{
+  yylval->errmsg = aprintf("invalid number after \\x-escape: %s", text);
+  return INVALID_CHARACTER;
+}
+
+static int invalid_escape_u(YYSTYPE* yylval, const char* text)
+{
+  yylval->errmsg = aprintf("invalid number after \\u-escape: %s", text);
+  return INVALID_CHARACTER;
+}
+
+static int invalid_escape_U(YYSTYPE* yylval, const char* text)
+{
+  yylval->errmsg = aprintf("invalid number after \\U-escape: %s", text);
+  return INVALID_CHARACTER;
+}
+
 static void unexpected_eof(YYSTYPE* yylval, const char* token_end)
 {
-  yylval->errmsg = aprintf("Missing %s at end of file", token_end);
+  yylval->errmsg = aprintf("missing %s at end of file", token_end);
 }
 
 static void unexpected_newline(YYSTYPE* yylval, const char* token_end)
 {
-  yylval->errmsg = aprintf("Missing %s at end of line", token_end);
+  yylval->errmsg = aprintf("missing %s at end of line", token_end);
 }
+
+//static int unexpected_codepoint(YYSTYPE* yylval)
+//{
+//  yylval->errmsg = aprintf("turn on option '-u' to use Unicode codepoints");
+//  return INVALID_CHARACTER;
+//}
 %}
 
 %option noyywrap nounput noinput
@@ -118,20 +155,30 @@ L			[a-zA-Z_\x80-\xff]
   \\[0-7]{1,3} {
     BEGIN IN_BRACKET;
     long c = strtol(yytext+1, NULL, 8);
-    if (UCHAR_MAX < c) {
-      yylval->errmsg = aprintf("Invalid number after \\-escape: %s", yytext+1);
-      return INVALID_CHARACTER;
-    }
+    if (UCHAR_MAX < c)
+      return invalid_escape_octonary(yylval, yytext);
+    yylval->integer = c;
+    return CHAR;
+  }
+  \\u[0-9a-fA-F]+ {
+    long c = strtol(yytext+2, NULL, 16), len = 0;
+    if (UINT16_MAX < c)
+      return invalid_escape_u(yylval, yytext);
+    yylval->integer = c;
+    return CHAR;
+  }
+  \\U[0-9a-fA-F]+ {
+    long c = strtol(yytext+2, NULL, 16), len = 0;
+    if (MAX_CODEPOINT < c)
+      return invalid_escape_U(yylval, yytext);
     yylval->integer = c;
     return CHAR;
   }
   \\x[0-9a-fA-F]+ {
     BEGIN IN_BRACKET;
     long c = strtol(yytext+2, NULL, 16);
-    if (UCHAR_MAX < c) {
-      yylval->errmsg = aprintf("Invalid number after \\-escape: %s", yytext+1);
-      return INVALID_CHARACTER;
-    }
+    if (UCHAR_MAX < c)
+      return invalid_escape_x(yylval, yytext);
     yylval->integer = c;
     return CHAR;
   }
@@ -217,20 +264,16 @@ L			[a-zA-Z_\x80-\xff]
   }
   \\x[0-9a-fA-F]+ {
     long c = strtol(yytext+2, NULL, 16);
-    if (UCHAR_MAX < c) {
-      yylval->errmsg = aprintf("Invalid number after \\-escape: %s", yytext+1);
-      return INVALID_CHARACTER;
-    }
+    if (UCHAR_MAX < c)
+      return invalid_escape_x(yylval, yytext);
     tmp_str.push_back(c);
     tmp_bracket += yytext;
   }
   \\u[0-9a-fA-F]+ {
     char s[4];
     long c = strtol(yytext+2, NULL, 16), len = 0;
-    if (UINT16_MAX < c) {
-      yylval->errmsg = aprintf("Invalid number after \\-escape: %s", yytext+1);
-      return INVALID_CHARACTER;
-    }
+    if (UINT16_MAX < c)
+      return invalid_escape_u(yylval, yytext);
     U8_APPEND_UNSAFE(s, len, c);
     tmp_str.insert(tmp_str.end(), s, s+len);
     tmp_bracket += yytext;
@@ -238,10 +281,8 @@ L			[a-zA-Z_\x80-\xff]
   \\U[0-9a-fA-F]+ {
     char s[4];
     long c = strtol(yytext+2, NULL, 16), len = 0;
-    if (UINT32_MAX < c) {
-      yylval->errmsg = aprintf("Invalid number after \\-escape: %s", yytext+1);
-      return INVALID_CHARACTER;
-    }
+    if (MAX_CODEPOINT < c)
+      return invalid_escape_U(yylval, yytext);
     U8_APPEND_UNSAFE(s, len, c);
     tmp_str.insert(tmp_str.end(), s, s+len);
     tmp_bracket += yytext;
@@ -254,10 +295,7 @@ L			[a-zA-Z_\x80-\xff]
   \\t tmp_str += '\t'; tmp_bracket += yytext;
   \\v tmp_str += '\v'; tmp_bracket += yytext;
   \\[\n\"\'?\\] tmp_str += yytext[1]; tmp_bracket += yytext;
-  \\. {
-    yylval->errmsg = aprintf("Invalid \\-escape: %s", yytext);
-    return INVALID_CHARACTER;
-  }
+  \\. return invalid_escape(yylval, yytext);
   .|\n tmp_str += yytext[0]; tmp_bracket += yytext[0];
 }
 

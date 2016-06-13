@@ -3,11 +3,13 @@
 # define _GNU_SOURCE
 #endif
 #include <assert.h>
-#include <stdio.h>
-#include <stdint.h>
+#include <map>
 #include <stdarg.h>
+#include <stdint.h>
+#include <stdio.h>
 #include <type_traits>
 #include <vector>
+using std::map;
 using std::vector;
 
 typedef int8_t i8;
@@ -32,6 +34,7 @@ typedef uint64_t u64;
 #define BLUE "\x1b[1;34m"
 #define MAGENTA "\x1b[1;35m"
 #define CYAN "\x1b[1;36m"
+const long MAX_CODEPOINT = 0x10ffff;
 
 void blue();
 void cyan();
@@ -43,7 +46,6 @@ void yellow();
 void indent(FILE* f, int d);
 
 const size_t BUF_SIZE = 512;
-const long AB = 256;
 
 void output_error(bool use_err, const char *format, va_list ap);
 void err_msg(const char *format, ...);
@@ -76,3 +78,24 @@ void sorted_insert(vector<T>& a, const T& x)
     *it = it[-1];
   *it = x;
 }
+
+struct DisjointIntervals
+{
+  typedef std::pair<long, long> value_type;
+  std::map<long, long> to;
+  template<class... Args>
+  void emplace(Args&&... args) {
+    value_type x{args...};
+    auto it = to.lower_bound(x.first);
+    if (it != to.begin() && x.first <= prev(it)->second)
+      x.first = (--it)->first;
+    auto it2 = to.upper_bound(x.second);
+    if (it2 != to.begin() && prev(it2)->first <= x.second && x.second < prev(it2)->second)
+      x.second = prev(it2)->second;
+    while (it != it2)
+      it = to.erase(it);
+    to.emplace(x);
+  }
+  void flip();
+  void print(); // XXX
+};

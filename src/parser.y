@@ -5,7 +5,6 @@
 
 #include <limits.h>
 #include <unicode/utf8.h>
-using std::bitset;
 
 #define YYINITDEPTH 1000
 #define YYLTYPE Location
@@ -39,7 +38,7 @@ int parse(const LocationFile& locfile, Stmt*& res);
 %union {
   long integer;
   string* str;
-  bitset<AB>* charset;
+  DisjointIntervals* intervals;
   Action* action;
   Expr* expr;
   Stmt* stmt;
@@ -48,8 +47,8 @@ int parse(const LocationFile& locfile, Stmt*& res);
 %destructor { delete $$; } <str>
 %destructor { delete $$; } <action>
 %destructor { delete $$; } <expr>
+%destructor { delete $$; } <intervals>
 %destructor { delete $$; } <stmt>
-%destructor { delete $$; } <charset>
 
 %token ACTION AS CPP DOTDOT EPSILON EXPORT IMPORT INTACT INVALID_CHARACTER SEMISEMI
 %token <integer> CHAR INTEGER
@@ -61,9 +60,9 @@ int parse(const LocationFile& locfile, Stmt*& res);
 %nonassoc '.'
 
 %type <action> action
-%type <stmt> define_stmt stmt stmt_list
 %type <expr> concat_expr difference_expr factor repeat intersect_expr union_expr unop_expr
-%type <charset> bracket bracket_items
+%type <intervals> bracket bracket_items
+%type <stmt> define_stmt stmt stmt_list
 
 %{
 #include "lexer.hh"
@@ -197,8 +196,7 @@ bracket:
     '[' bracket_items ']' { $$ = $2; }
   | '[' '^' bracket_items ']' {
       $$ = $3;
-      REP(i, $$->size())
-        $3->flip(i);
+      $$->flip();
     }
 
 bracket_items:
@@ -207,14 +205,13 @@ bracket_items:
       if ($2 > $4)
         FAIL(yyloc, "negative range in character class");
       else
-        FOR(i, $2, $4+1)
-          $$->set(i);
+        $$->emplace($2, $4+1);
     }
   | bracket_items CHAR {
       $$ = $1;
-      $$->set($2);
+      $$->emplace($2, $2+1);
     }
-  | %empty { $$ = new bitset<AB>; }
+  | %empty { $$ = new DisjointIntervals; }
 
 %%
 
