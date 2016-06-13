@@ -64,11 +64,11 @@ static void unexpected_newline(YYSTYPE* yylval, const char* token_end)
   yylval->errmsg = aprintf("missing %s at end of line", token_end);
 }
 
-//static int unexpected_codepoint(YYSTYPE* yylval)
-//{
-//  yylval->errmsg = aprintf("turn on option '-u' to use Unicode codepoints");
-//  return INVALID_CHARACTER;
-//}
+static int unexpected_codepoint(YYSTYPE* yylval)
+{
+  yylval->errmsg = aprintf("cannot use Unicode codepoints");
+  return INVALID_CHARACTER;
+}
 %}
 
 %option noyywrap nounput noinput
@@ -96,7 +96,7 @@ L			[a-zA-Z_\x80-\xff]
 
 %%
 
-"::" return SEMISEMI;
+"::" return COLONCOLON;
 ".." return DOTDOT;
 ";" if (semicolon) return '\n';
 [-~!&*=+,.?|{}:] return yytext[0];
@@ -152,7 +152,7 @@ L			[a-zA-Z_\x80-\xff]
   [^-\\\]\n] yylval->integer = yytext[0]; return CHAR;
 }
 <IN_BRACKET_FIRST,IN_BRACKET>{
-  \\[0-7]{1,3} {
+  \\[0-7]+ {
     BEGIN IN_BRACKET;
     long c = strtol(yytext+1, NULL, 8);
     if (UCHAR_MAX < c)
@@ -161,6 +161,9 @@ L			[a-zA-Z_\x80-\xff]
     return CHAR;
   }
   \\u[0-9a-fA-F]+ {
+    BEGIN IN_BRACKET;
+    if (opt_bytes)
+      return unexpected_codepoint(yylval);
     long c = strtol(yytext+2, NULL, 16), len = 0;
     if (UINT16_MAX < c)
       return invalid_escape_u(yylval, yytext);
@@ -168,6 +171,9 @@ L			[a-zA-Z_\x80-\xff]
     return CHAR;
   }
   \\U[0-9a-fA-F]+ {
+    BEGIN IN_BRACKET;
+    if (opt_bytes)
+      return unexpected_codepoint(yylval);
     long c = strtol(yytext+2, NULL, 16), len = 0;
     if (MAX_CODEPOINT < c)
       return invalid_escape_U(yylval, yytext);
@@ -209,7 +215,7 @@ L			[a-zA-Z_\x80-\xff]
   "{" BEGIN IN_CODE; tmp_bracket.clear();
   [ \t\n]+ {}
   <<EOF>> yy_pop_state(yyscanner);
-  . yylval->errmsg = strdup("Invalid character"); return INVALID_CHARACTER;
+  . yylval->errmsg = strdup("invalid character"); return INVALID_CHARACTER;
 }
 <IN_CODE>{
   "'" { tmp_bracket += '\''; yy_push_state(IN_Q_STRING, yyscanner); }
@@ -253,12 +259,10 @@ L			[a-zA-Z_\x80-\xff]
 }
 
 <IN_Q_STRING,IN_QQ_STRING>{
-  \\[0-7]{1,3} {
+  \\[0-7]+ {
     long c = strtol(yytext+1, NULL, 8);
-    if (UCHAR_MAX < c) {
-      yylval->errmsg = aprintf("Invalid number after \\-escape: %s", yytext+1);
-      return INVALID_CHARACTER;
-    }
+    if (UCHAR_MAX < c)
+      return invalid_escape_octonary(yylval, yytext);
     tmp_str.push_back(c);
     tmp_bracket += yytext;
   }
@@ -301,4 +305,4 @@ L			[a-zA-Z_\x80-\xff]
 
 "\n" if (YY_START == INITIAL && ! semicolon) return '\n';
 [ \t]+ {}
-. { yylval->errmsg = strdup("Invalid character"); return INVALID_CHARACTER; }
+. { yylval->errmsg = strdup("invalid character"); return INVALID_CHARACTER; }

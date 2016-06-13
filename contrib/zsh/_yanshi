@@ -1,11 +1,13 @@
 #compdef yanshi
 
 _arguments \
+  '(-b --bytes)'{-b,--bytes}'[make labels range over \[0,256), Unicode literals will be treated as UTF-8 bytes]' \
   '(-c --check)'{-c,--check}'=[check syntax & use/def]' \
   '(-d --debug)'{-d,--debug}'=[debug level]:level:(0 1 2 3 4 5)' \
   '--dump-action[dump associated actions for each edge]' \
   '--dump-assoc[dump associated AST Expr for each state]' \
   '--dump-automaton[dump automata]' \
+  '--dump-embed[dump statistics of EmbedExpr]' \
   '--dump-module[dump module use/def/...]' \
   '--dump-tree[dump AST]' \
   '(-G --graph)'{-G,--graph}'[output a Graphviz dot file]' \

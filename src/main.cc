@@ -19,12 +19,14 @@ void print_help(FILE *fh)
   fputs(
         "\n"
         "Options:\n"
+        "  -b,--bytes                make labels range over [0,256), Unicode literals will be treated as UTF-8 bytes\n"
         "  --check                   check syntax & use/def\n"
         "  --debug                   debug level\n"
         "  --debug-output            filename for debug output\n"
         "  --dump-action             dump associated actions for each edge\n"
         "  --dump-assoc              dump associated AST Expr for each state\n"
         "  --dump-automaton          dump automata\n"
+        "  --dump-embed              dump statistics of EmbedExpr\n"
         "  --dump-module             dump module use/def/...\n"
         "  --dump-tree               dump AST\n"
         "  -G,--graph <dir>          output a Graphviz dot file\n"
@@ -42,26 +44,30 @@ int main(int argc, char *argv[])
 {
   int opt;
   static struct option long_options[] = {
-    {"help",                no_argument,       0,   'h'},
+    {"bytes",               no_argument,       0,   'b'},
     {"check",               required_argument, 0,   'c'},
     {"debug",               required_argument, 0,   'd'},
     {"debug-output",        required_argument, 0,   'l'},
     {"dump-action",         no_argument,       0,   1000},
     {"dump-assoc",          no_argument,       0,   1001},
     {"dump-automaton",      no_argument,       0,   1002},
-    {"dump-module",         no_argument,       0,   1003},
-    {"dump-tree",           no_argument,       0,   1004},
+    {"dump-embed",          no_argument,       0,   1003},
+    {"dump-module",         no_argument,       0,   1004},
+    {"dump-tree",           no_argument,       0,   1005},
     {"graph",               no_argument,       0,   'G'},
     {"import",              required_argument, 0,   'I'},
     {"standalone",          no_argument,       0,   'S'},
     {"substring-grammar",   no_argument,       0,   's'},
     {"output",              required_argument, 0,   'o'},
-    {"unicode",             no_argument,       0,   'u'},
+    {"help",                no_argument,       0,   'h'},
     {0,                     0,                 0,   0},
   };
 
-  while ((opt = getopt_long(argc, argv, "Dcd:GhI:l:o:Ssu", long_options, NULL)) != -1) {
+  while ((opt = getopt_long(argc, argv, "bDcd:GhI:l:o:Ss", long_options, NULL)) != -1) {
     switch (opt) {
+    case 'b':
+      opt_bytes = true;
+      break;
     case 'D':
       break;
     case 'c':
@@ -95,14 +101,12 @@ int main(int argc, char *argv[])
     case 's':
       opt_substring_grammar = true;
       break;
-    case 'u':
-      AB = 0x110000;
-      break;
     case 1000: opt_dump_action = true; break;
     case 1001: opt_dump_assoc = true; break;
     case 1002: opt_dump_automaton = true; break;
-    case 1003: opt_dump_module = true; break;
-    case 1004: opt_dump_tree = true; break;
+    case 1003: opt_dump_embed = true; break;
+    case 1004: opt_dump_module = true; break;
+    case 1005: opt_dump_tree = true; break;
     case '?':
       print_help(stderr);
       break;

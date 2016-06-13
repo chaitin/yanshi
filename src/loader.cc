@@ -272,6 +272,7 @@ static vector<DefineStmt*> topo_define_stmts(long& n_errors)
   vector<DefineStmt*> topo;
   vector<DefineStmt*> st;
   unordered_map<DefineStmt*, i8> vis; // 0: unvisited; 1: in stack; 2: visited; 3: in a cycle
+  unordered_map<DefineStmt*, long> cnt;
   function<bool(DefineStmt*)> dfs = [&](DefineStmt* u) {
     if (vis[u] == 2)
       return false;
@@ -291,12 +292,15 @@ static vector<DefineStmt*> topo_define_stmts(long& n_errors)
       fputs("\n", stderr);
       return true;
     }
+    cnt[u] = u->export_ ? 1 : 0;
     vis[u] = 1;
     st.push_back(u);
     bool cycle = false;
     for (auto v: depended_by[u])
       if (dfs(v))
         cycle = true;
+      else
+        cnt[u] += cnt[v];
     st.pop_back();
     vis[u] = 2;
     topo.push_back(u);
@@ -306,6 +310,12 @@ static vector<DefineStmt*> topo_define_stmts(long& n_errors)
     if (! vis[d.first] && dfs(d.first)) // detected cycle
       n_errors++;
   reverse(ALL(topo));
+  if (opt_dump_embed) {
+    magenta(); printf("=== Embed\n"); sgr0();
+    for (auto stmt: topo)
+      if (cnt[stmt] > 0)
+        printf("count(%s::%s) = %ld\n", stmt->module->filename.c_str(), stmt->lhs.c_str(), cnt[stmt]);
+  }
   return topo;
 }
 

@@ -39,7 +39,7 @@ $(BUILD)/unittest/%: unittest/%.cc $(wildcard unittest/*.hh) $(filter-out $(BUIL
 src/lexer.cc src/lexer.hh: src/lexer.l
 	flex --header-file=src/lexer.hh -o src/lexer.cc $<
 
-src/parser.cc src/parser.hh: src/parser.y src/location.hh src/syntax.hh
+src/parser.cc src/parser.hh: src/parser.y src/common.hh src/location.hh src/option.hh src/syntax.hh
 	bison --defines=src/parser.hh -o src/parser.cc $<
 
 $(BUILD)/loader.o: src/parser.hh

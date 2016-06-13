@@ -29,13 +29,13 @@ namespace std
 
 bool Fsa::has(long u, long a) const
 {
-  auto it = lower_bound(ALL(adj[u]), make_pair(a, LONG_MIN));
-  return it != adj[u].end() && it->first == a;
+  auto it = upper_bound(ALL(adj[u]), make_pair(make_pair(a, LONG_MAX), LONG_MAX));
+  return it != adj[u].begin() && a < (--it)->first.second;
 }
 
 bool Fsa::has_special(long u) const
 {
-  return lower_bound(ALL(adj[u]), make_pair(AB, LONG_MIN)) != adj[u].end();
+  return lower_bound(ALL(adj[u]), make_pair(make_pair(AB, LONG_MIN), LONG_MIN)) != adj[u].end();
 }
 
 bool Fsa::is_final(long x) const
@@ -53,7 +53,7 @@ void Fsa::epsilon_closure(vector<long>& src) const
   REP(i, src.size()) {
     long u = src[i];
     for (auto& e: adj[u]) {
-      if (-1 < e.first) break;
+      if (-1 < e.first.first) break;
       if (! vis[e.second]) {
         vis[e.second] = true;
         src.push_back(e.second);
@@ -74,17 +74,16 @@ Fsa Fsa::operator~() const
   REP(i, accept) {
     long j = 0;
     for (auto& e: adj[i]) {
-      for (; j < e.first; j++)
-        r.adj[i].emplace_back(j, accept);
+      if (j < e.first.first)
+        r.adj[i].emplace_back(make_pair(j, e.first.first), accept);
       r.adj[i].emplace_back(e.first, e.second);
-      j = e.first+1;
+      j = e.first.second;
     }
-    for (; j < AB; j++)
-      r.adj[i].emplace_back(j, accept);
+    if (j < AB)
+      r.adj[i].emplace_back(make_pair(j, AB), accept);
   }
   r.adj.emplace_back();
-  REP(i, AB)
-    r.adj[accept].emplace_back(i, accept);
+  r.adj[accept].emplace_back(make_pair(0, AB), accept);
   vector<long> new_finals;
   auto j = finals.begin();
   REP(i, accept+1) {
@@ -138,10 +137,10 @@ void Fsa::accessible(function<void(long)> relate)
 
 void Fsa::co_accessible(function<void(long)> relate)
 {
-  vector<vector<pair<long, long>>> radj(n());
+  vector<vector<long>> radj(n());
   REP(i, n())
     for (auto& e: adj[i])
-      radj[e.second].emplace_back(e.first, i);
+      radj[e.second].push_back(i);
   REP(i, n())
     sort(ALL(radj[i]));
   vector<long> q = finals, id(n(), 0);
@@ -149,10 +148,10 @@ void Fsa::co_accessible(function<void(long)> relate)
     id[f] = 1;
   REP(i, q.size()) {
     long u = q[i];
-    for (auto& e: radj[u])
-      if (! id[e.second]) {
-        id[e.second] = 1;
-        q.push_back(e.second);
+    for (auto& v: radj[u])
+      if (! id[v]) {
+        id[v] = 1;
+        q.push_back(v);
       }
   }
   if (! id[start]) {
@@ -192,35 +191,42 @@ Fsa Fsa::difference(const Fsa& rhs, function<void(long)> relate) const
 {
   Fsa r;
   vector<pair<long, long>> q;
-  long u0, u1, v0, v1;
   unordered_map<long, long> m;
   q.emplace_back(start, rhs.start);
   m[(rhs.n()+1) * start + rhs.start] = 0;
   r.start = 0;
   REP(i, q.size()) {
+    long u0, u1, v0, v1;
     tie(u0, u1) = q[i];
     if (is_final(u0) && ! rhs.is_final(u1))
       r.finals.push_back(i);
     r.adj.emplace_back();
     relate(u0);
-    vector<pair<long, long>>::const_iterator it0 = adj[u0].begin(), it1, it1e;
+    vector<Edge>::const_iterator it0 = adj[u0].begin(), it1, it1e;
     if (u1 == rhs.n())
       it1 = it1e = rhs.adj[0].end();
     else {
       it1 = rhs.adj[u1].begin();
       it1e = rhs.adj[u1].end();
     }
-    for (; it0 != adj[u0].end(); ++it0) {
-      while (it1 != it1e && it1->first < it0->first)
+    long last = LONG_MIN;
+    while (it0 != adj[u0].end()) {
+      long from = max(last, it0->first.first), to = it0->first.second;
+      while (it1 != it1e && it1->first.second <= from)
         ++it1;
-      long v1 = it1 != it1e && it1->first == it0->first ? it1->second : rhs.n(),
+      if (it1 != it1e)
+        to = min(to, from < it1->first.first ? it1->first.first : it1->first.second);
+      last = to;
+      long v1 = it1 != it1e && it1->first.first <= from ? it1->second : rhs.n(),
            t = (rhs.n()+1) * it0->second + v1;
       auto mit = m.find(t);
       if (mit == m.end()) {
         mit = m.emplace(t, m.size()).first;
         q.emplace_back(it0->second, v1);
       }
-      r.adj[i].emplace_back(it0->first, mit->second);
+      r.adj[i].emplace_back(make_pair(from, to), mit->second);
+      if (to == it0->first.second)
+        ++it0;
     }
   }
   return r;
@@ -243,9 +249,9 @@ Fsa Fsa::intersect(const Fsa& rhs, function<void(long, long)> relate) const
     relate(u0, u1);
     auto it0 = adj[u0].begin(), it1 = rhs.adj[u1].begin();
     while (it0 != adj[u0].end() && it1 != rhs.adj[u1].end()) {
-      if (it0->first < it1->first)
+      if (it0->first.second <= it1->first.first)
         ++it0;
-      else if (it0->first > it1->first)
+      else if (it1->first.second <= it0->first.first)
         ++it1;
       else {
         long t = rhs.n() * it0->second + it1->second;
@@ -254,9 +260,13 @@ Fsa Fsa::intersect(const Fsa& rhs, function<void(long, long)> relate) const
           mit = m.emplace(t, m.size()).first;
           q.emplace_back(it0->second, it1->second);
         }
-        r.adj[i].emplace_back(it0->first, mit->second);
-        ++it0;
-        ++it1;
+        r.adj[i].emplace_back(make_pair(max(it0->first.first, it1->first.first), min(it0->first.second, it1->first.second)), mit->second);
+        if (it0->first.second < it1->first.second)
+          ++it0;
+        else if (it0->first.second > it1->first.second)
+          ++it1;
+        else
+          ++it0, ++it1;
       }
     }
   }
@@ -268,7 +278,7 @@ Fsa Fsa::determinize(function<void(long, const vector<long>&)> relate) const
   Fsa r;
   r.start = 0;
   unordered_map<vector<long>, long> m;
-  vector<vector<pair<long, long>>::const_iterator> its(n());
+  vector<vector<Edge>::const_iterator> its(n());
   vector<long> vs{start};
   epsilon_closure(vs);
   m[vs] = 0;
@@ -278,34 +288,44 @@ Fsa Fsa::determinize(function<void(long, const vector<long>&)> relate) const
     vector<long> x = move(st.top());
     st.pop();
     long id = m[x];
-    if (id+1 > r.adj.size())
+    if (id+1 > r.adj.size()) {
       r.adj.resize(id+1);
+      //DP(5, "%zd %ld", r.adj.size(), x.size());
+    }
     relate(id, x);
-    if (id % 100 == 0)
-      DP(5, "%ld %ld", id, x.size());
     bool final = false;
     for (long u: x) {
       if (is_final(u))
         final = true;
       its[u] = adj[u].begin();
-      // skip epsilon
-      while (its[u] != adj[u].end() && its[u]->first < 0)
-        ++its[u];
     }
     if (final)
       r.finals.push_back(id);
+    long last = INT_MIN;
     for(;;) {
       // find minimum transition
-      long c = LONG_MAX;
-      for (long u: x)
-        if (its[u] != adj[u].end())
-          c = min(c, its[u]->first);
-      if (c == LONG_MAX) break;
+      long from = LONG_MAX, to = LONG_MAX;
+      for (long u: x) {
+        while (its[u] != adj[u].end() && its[u]->first.second <= last)
+          ++its[u];
+        for (auto it = its[u]; it != adj[u].end() && max(last, its[u]->first.first) == max(last, it->first.first); ++it) {
+          long c = max(last, it->first.first);
+          if (c < from) {
+            to = min(from, it->first.second);
+            from = c;
+          } else if (from < c && c < to)
+            to = c;
+        }
+      }
+      if (from == LONG_MAX) break;
+      last = to;
+      // skip epsilon transitions
+      if (! to) continue;
       // successors
       vs.clear();
       for (long u: x)
-        for (; its[u] != adj[u].end() && its[u]->first == c; ++its[u])
-          vs.push_back(its[u]->second);
+        for (auto it = its[u]; it != adj[u].end() && it->first.first <= from; ++it)
+          vs.push_back(it->second);
       sort(ALL(vs));
       vs.erase(unique(ALL(vs)), vs.end());
       epsilon_closure(vs);
@@ -314,7 +334,7 @@ Fsa Fsa::determinize(function<void(long, const vector<long>&)> relate) const
         mit = m.emplace(vs, m.size()).first;
         st.push(vs);
       }
-      r.adj[id].emplace_back(c, mit->second);
+      r.adj[id].emplace_back(make_pair(from, to), mit->second);
     }
   }
   sort(ALL(r.finals));
@@ -323,10 +343,21 @@ Fsa Fsa::determinize(function<void(long, const vector<long>&)> relate) const
 
 Fsa Fsa::distinguish(function<void(vector<long>&)> relate) const
 {
-  vector<vector<pair<long, long>>> radj(n());
+  vector<long> scale;
   REP(i, n())
     for (auto& e: adj[i])
-      radj[e.second].emplace_back(e.first, i);
+      scale.push_back(e.first.first);
+  sort(ALL(scale));
+  scale.erase(unique(ALL(scale)), scale.end());
+
+  vector<vector<pair<long, long>>> radj(n());
+  REP(i, n())
+    for (auto& e: adj[i]) {
+      long from = lower_bound(ALL(scale), e.first.first) - scale.begin(),
+           to = lower_bound(ALL(scale), e.first.second) - scale.begin();
+      FOR(j, from, to)
+        radj[e.second].emplace_back(j, i);
+    }
   REP(i, n())
     sort(ALL(radj[i]));
   vector<long> L(n()), R(n()), B(n()), C(n(), 0), CC(n(), 0);
@@ -363,8 +394,7 @@ Fsa Fsa::distinguish(function<void(vector<long>&)> relate) const
     vector<long> lb;
     for (long x = fx; ; ) {
       for (auto& e: radj[x])
-        if (e.first >= 0)
-          lb.push_back(e.first);
+        lb.push_back(e.first);
       if ((x = R[x]) == fx) break;
     }
     sort(ALL(lb));
@@ -373,13 +403,9 @@ Fsa Fsa::distinguish(function<void(vector<long>&)> relate) const
   };
 
   if (fx >= 0)
-    //REP(a, AB+1)
-    //  refines.emplace(a, fx);
     for (long a: labels(fx))
       refines.emplace(a, fx);
   if (fy >= 0)
-    //REP(a, AB+1)
-    //  refines.emplace(a, fy);
     for (long a: labels(fy))
       refines.emplace(a, fy);
   while (refines.size()) {
@@ -478,18 +504,24 @@ Fsa Fsa::distinguish(function<void(vector<long>&)> relate) const
     for (auto& e: adj[i])
       r.adj[B[i]].emplace_back(e.first, B[e.second]);
   REP(i, nn) {
+    // merge edges with the same destination
+    sort(ALL(r.adj[i]), [](const Edge& x, const Edge& y) {
+      return x.second != y.second ? x.second < y.second : x.first < y.first;
+    });
+    auto it2 = r.adj[i].begin();
+    for (auto it = r.adj[i].begin(); it != r.adj[i].end(); ) {
+      long v = it->second, from = it->first.first, to = it->first.second;
+      while (++it != r.adj[i].end() && it->second == v)
+        if (it->first.first <= to)
+          to = max(to, it->first.second);
+        else {
+          *it2++ = make_pair(make_pair(from, to), v);
+          tie(from, to) = it->first;
+        }
+      *it2++ = make_pair(make_pair(from, to), v);
+    }
+    r.adj[i].erase(it2, r.adj[i].end());
     sort(ALL(r.adj[i]));
-    r.adj[i].erase(unique(ALL(r.adj[i])), r.adj[i].end());
   }
   return r;
-
-  //REP(i, n())
-  //  if (B[i] == i) {
-  //    printf("%ld:", i);
-  //    for (long j = i; ; ) {
-  //      printf(" %ld", j);
-  //      if ((j = R[j]) == i) break;
-  //    }
-  //    puts("");
-  //  }
 }

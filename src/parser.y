@@ -1,6 +1,7 @@
 %code requires {
 #include "common.hh"
 #include "location.hh"
+#include "option.hh"
 #include "syntax.hh"
 
 #include <limits.h>
@@ -50,7 +51,7 @@ int parse(const LocationFile& locfile, Stmt*& res);
 %destructor { delete $$; } <intervals>
 %destructor { delete $$; } <stmt>
 
-%token ACTION AS CPP DOTDOT EPSILON EXPORT IMPORT INTACT INVALID_CHARACTER SEMISEMI
+%token ACTION AS COLONCOLON CPP DOTDOT EPSILON EXPORT IMPORT INTACT INVALID_CHARACTER
 %token <integer> CHAR INTEGER
 %token <str> IDENT
 %token <str> BRACED_CODE
@@ -147,16 +148,23 @@ unop_expr:
 factor:
     EPSILON { $$ = new EpsilonExpr; $$->loc = yyloc; }
   | IDENT { string t; $$ = new EmbedExpr(t, *$1); delete $1; $$->loc = yyloc; }
-  | IDENT SEMISEMI IDENT { $$ = new EmbedExpr(*$1, *$3); delete $1; delete $3; $$->loc = yyloc; }
+  | IDENT COLONCOLON IDENT { $$ = new EmbedExpr(*$1, *$3); delete $1; delete $3; $$->loc = yyloc; }
   | '!' IDENT { string t; $$ = new CollapseExpr(t, *$2); delete $2; $$->loc = yyloc; }
-  | '!' IDENT SEMISEMI IDENT { $$ = new CollapseExpr(*$2, *$4); delete $2; delete $4; $$->loc = yyloc; }
+  | '!' IDENT COLONCOLON IDENT { $$ = new CollapseExpr(*$2, *$4); delete $2; delete $4; $$->loc = yyloc; }
   | STRING_LITERAL { $$ = new LiteralExpr(*$1); delete $1; $$->loc = yyloc; }
   | '.' { $$ = new DotExpr(); $$->loc = yyloc; }
+  | INTEGER { auto t = new DisjointIntervals; t->emplace($1, $1+1); $$ = new BracketExpr(t); $$->loc = yyloc; }
   | bracket { $$ = new BracketExpr($1); $$->loc = yyloc; }
   | STRING_LITERAL DOTDOT STRING_LITERAL {
       i32 c0, c1, i = 0, j = 0;
-      U8_NEXT($1->c_str(), i, $1->size(), c0);
-      U8_NEXT($3->c_str(), j, $3->size(), c1);
+      if (opt_bytes) {
+        c0 = u8((*$1)[0]);
+        c1 = u8((*$3)[0]);
+        i = j = 1;
+      } else {
+        U8_NEXT($1->c_str(), i, $1->size(), c0);
+        U8_NEXT($3->c_str(), j, $3->size(), c1);
+      }
       delete $1;
       delete $3;
       if (i != $1->size() || j != $3->size()) {
@@ -166,7 +174,9 @@ factor:
         FAIL(yyloc, "negative Unicode range");
         $$ = new DotExpr;
       } else {
-        $$ = new UnicodeRangeExpr(c0, c1+1);
+        auto t = new DisjointIntervals;
+        t->emplace(c0, c1+1);
+        $$ = new BracketExpr(t);
         $$->loc = yyloc;
       }
     }
@@ -189,7 +199,7 @@ repeat:
 
 action:
     IDENT { string t; $$ = new RefAction(t, *$1); delete $1; $$->loc = yyloc; }
-  | IDENT SEMISEMI IDENT { $$ = new RefAction(*$1, *$3); delete $1; delete $3; $$->loc = yyloc; }
+  | IDENT COLONCOLON IDENT { $$ = new RefAction(*$1, *$3); delete $1; delete $3; $$->loc = yyloc; }
   | BRACED_CODE { $$ = new InlineAction(*$1); delete $1; $$->loc = yyloc; }
 
 bracket:

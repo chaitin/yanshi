@@ -9,7 +9,6 @@
 #include <map>
 #include <sstream>
 #include <stack>
-#include <typeinfo>
 #include <unordered_map>
 using namespace std;
 
@@ -22,12 +21,7 @@ static void print_assoc(const FsaAnno& anno)
     printf("%ld:", i);
     for (auto aa: anno.assoc[i]) {
       auto a = aa.first;
-      const char* name = typeid(*a).name();
-      while (name && isdigit(name[0]))
-        name++;
-      string t = name;
-      t = t.substr(t.size()-4); // suffix 'Expr'
-      printf(" %s(%ld-%ld", t.c_str(), a->loc.start, a->loc.end);
+      printf(" %s(%ld-%ld", a->name().c_str(), a->loc.start, a->loc.end);
       if (a->entering.size())
         printf(",>%zd", a->entering.size());
       if (a->leaving.size())
@@ -55,13 +49,13 @@ static void print_automaton(const Fsa& fsa)
   REP(i, fsa.n()) {
     printf("%ld:", i);
     for (auto it = fsa.adj[i].begin(); it != fsa.adj[i].end(); ) {
-      long from = it->first, to = from, v = it->second;
-      while (++it != fsa.adj[i].end() && it->first == to+1 && it->second == v)
-        to++;
-      if (from == to)
+      long from = it->first.first, to = it->first.second, v = it->second;
+      while (++it != fsa.adj[i].end() && to == it->first.first && it->second == v)
+        to = it->first.second;
+      if (from == to-1)
         printf(" (%ld,%ld)", from, v);
       else
-        printf(" (%ld-%ld,%ld)", from, to, v);
+        printf(" (%ld-%ld,%ld)", from, to-1, v);
     }
     puts("");
   }
@@ -100,6 +94,7 @@ struct Compiler : Visitor<Expr> {
     } else
       expr.anc.assign(1, nullptr);
     path.push(&expr);
+    DP(5, "%s(%ld-%ld)", expr.name().c_str(), expr.loc.start, expr.loc.end);
   }
   void post_expr(Expr& expr) {
     path.pop();
@@ -142,7 +137,7 @@ struct Compiler : Visitor<Expr> {
     st.push(anno);
   }
   void visit(EpsilonExpr& expr) override {
-    st.push(FsaAnno::epsilon(&expr));
+    st.push(FsaAnno::epsilon_fsa(&expr));
   }
   void visit(IntersectExpr& expr) override {
     visit(*expr.rhs);
@@ -169,9 +164,6 @@ struct Compiler : Visitor<Expr> {
     visit(*expr.inner);
     st.top().star(&expr);
   }
-  void visit(UnicodeRangeExpr& expr) override {
-    st.push(FsaAnno::unicode_range(expr));
-  }
   void visit(UnionExpr& expr) override {
     visit(*expr.rhs);
     FsaAnno rhs = move(st.top());
@@ -188,8 +180,9 @@ void compile(DefineStmt* stmt)
   Compiler comp;
   comp.visit(*stmt->rhs);
   anno = move(comp.st.top());
-  //anno.determinize();
-  //anno.minimize();
+  anno.determinize();
+  anno.minimize();
+  DP(4, "size(%s::%s) = %ld", stmt->module->filename.c_str(), stmt->lhs.c_str(), anno.fsa.n());
 }
 
 void compile_actions(DefineStmt* stmt)
@@ -245,17 +238,15 @@ void compile_actions(DefineStmt* stmt)
     fprintf(output, "case %ld:\n", u);
     indent(output, 2);
     fprintf(output, "switch (c) {\n");
+
+    unordered_map<long, pair<vector<pair<long, long>>, stringstream>> v2case;
     for (auto it = anno.fsa.adj[u].begin(); it != anno.fsa.adj[u].end(); ) {
-      long from = it->first, to = from, v = it->second;
-      while (++it != anno.fsa.adj[u].end() && it->first == to+1 && it->second == v)
-        to++;
-      indent(output, 2);
-      if (from == to)
-        fprintf(output, "case %ld:\n", from);
-      else
-        fprintf(output, "case %ld ... %ld:\n", from, to);
-      indent(output, 3);
-      fprintf(output, "v = %ld;\n", v);
+      long from = it->first.first, to = it->first.second, v = it->second;
+      while (++it != anno.fsa.adj[u].end() && to == it->first.first && it->second == v)
+        to = it->first.second;
+      v2case[v].first.emplace_back(from, to);
+      stringstream& body = v2case[v].second;
+
       auto ie = withins[u].end(), je = withins[v].end();
 
       // leaving = Expr(u) - Expr(v)
@@ -265,8 +256,7 @@ void compile_actions(DefineStmt* stmt)
         if (j == je || i->first != j->first)
           for (auto action: i->first->leaving) {
             D("%%");
-            indent(output, 3);
-            fprintf(output, "{%s}\n", get_code(action).c_str());
+            body << "{" << get_code(action) << "}\n";
           }
       }
 
@@ -277,8 +267,7 @@ void compile_actions(DefineStmt* stmt)
         if (i == ie || i->first != j->first)
           for (auto action: j->first->entering) {
             D(">");
-            indent(output, 3);
-            fprintf(output, "{%s}\n", get_code(action).c_str());
+            body << "{" << get_code(action) << "}\n";
           }
       }
 
@@ -289,8 +278,7 @@ void compile_actions(DefineStmt* stmt)
         if (i != ie && i->first == j->first)
           for (auto action: j->first->transiting) {
             D("$");
-            indent(output, 3);
-            fprintf(output, "{%s}\n", get_code(action).c_str());
+            body << "{" << get_code(action) << "}\n";
           }
       }
 
@@ -301,14 +289,25 @@ void compile_actions(DefineStmt* stmt)
         if (i != ie && i->first == j->first && long(j->second) & long(ExprTag::final))
           for (auto action: j->first->finishing) {
             D("@");
-            indent(output, 3);
-            fprintf(output, "{%s}\n", get_code(action).c_str());
+            body << "{" << get_code(action) << "}\n";
           }
       }
+    }
 
+    for (auto& x: v2case) {
+      for (auto& y: x.second.first) {
+        indent(output, 2);
+        if (y.first == y.second-1)
+          fprintf(output, "case %ld:\n", y.first);
+        else
+          fprintf(output, "case %ld ... %ld:\n", y.first, y.second-1);
+      }
+      indent(output, 3);
+      fprintf(output, "v = %ld;\n%s", x.first, x.second.second.str().c_str());
       indent(output, 3);
       fprintf(output, "break;\n");
     }
+
     indent(output, 2);
     fprintf(output, "}\n");
     indent(output, 2);
@@ -327,7 +326,7 @@ void compile_export(DefineStmt* stmt)
   FsaAnno& anno = compiled[stmt];
 
   DP(3, "Construct automaton with all referenced CollapseExpr's DefineStmt");
-  vector<vector<pair<long, long>>> adj;
+  vector<vector<Edge>> adj;
   decltype(anno.assoc) assoc;
   vector<vector<DefineStmt*>> cllps;
   long allo = 0;
@@ -353,11 +352,15 @@ void compile_export(DefineStmt* stmt)
             DefineStmt* v = e->define_stmt;
             allocate_collapse(v);
             // (i@{CollapseExpr,...}, special, _) -> ({CollapseExpr,...}, epsilon, CollapseExpr.define_stmt.start)
-            sorted_insert(adj[i], make_pair(-1L, stmt2offset[v]+compiled[v].fsa.start));
+            sorted_emplace(adj[i], epsilon, stmt2offset[v]+compiled[v].fsa.start);
           }
         long j = adj[i].size();
-        while (j && adj[i][j-1].first >= AB) {
-          long v = adj[i][--j].second;
+        while (j && AB < adj[i][j-1].first.second) {
+          long v = adj[i][j-1].second;
+          if (adj[i][j-1].first.first < AB)
+            adj[i][j-1].first.second = AB;
+          else
+            j--;
           for (auto aa: assoc[v])
             if (auto e = dynamic_cast<CollapseExpr*>(aa.first)) {
               DefineStmt* w = e->define_stmt;
@@ -365,7 +368,7 @@ void compile_export(DefineStmt* stmt)
               // (_, special, v@{CollapseExpr,...}) -> (CollapseExpr.define_stmt.final, epsilon, v)
               for (long f: compiled[w].fsa.finals) {
                 long g = stmt2offset[w]+f;
-                sorted_insert(adj[g], make_pair(-1L, v));
+                sorted_emplace(adj[g], epsilon, v);
                 if (g == i)
                   j++;
               }
@@ -447,18 +450,15 @@ void generate_graphviz(Module* mo)
         REP(u, anno.fsa.n()) {
           unordered_map<long, stringstream> labels;
           bool first = true;
-          auto it = anno.fsa.adj[u].begin(), it2 = it, ite = anno.fsa.adj[u].end();
-          for (; it != ite; it = it2) {
-            long v = it->first;
-            while (++it2 != ite && it->second == it2->second)
-              v = it2->first;
+          auto it = anno.fsa.adj[u].begin();
+          for (; it != anno.fsa.adj[u].end(); ++it) {
             stringstream& lb = labels[it->second];
             if (! lb.str().empty())
               lb << ',';
-            if (it->first == v)
-              lb << v;
+            if (it->first.first == it->first.second-1)
+              lb << it->first.first;
             else
-              lb << it->first << '-' << v;
+              lb << it->first.first << '-' << it->first.second-1;
           }
           for (auto& lb: labels) {
             indent(output, 1);

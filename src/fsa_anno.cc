@@ -85,15 +85,17 @@ void FsaAnno::co_accessible() {
 }
 
 void FsaAnno::complement(ComplementExpr* expr) {
+  if (! deterministic)
+    fsa = fsa.determinize([&](long, const vector<long>&){});
   fsa = ~ fsa;
   assoc.assign(fsa.n(), {});
-  // 'deterministic' is preserved
+  deterministic = true;
 }
 
 void FsaAnno::concat(FsaAnno& rhs, ConcatExpr* expr) {
   long ln = fsa.n(), rn = rhs.fsa.n();
   for (long f: fsa.finals)
-    fsa.adj[f].emplace(fsa.adj[f].begin(), -1, ln+rhs.fsa.start);
+    emplace_front(fsa.adj[f], epsilon, ln+rhs.fsa.start);
   for (auto& es: rhs.fsa.adj) {
     for (auto& e: es)
       e.second += ln;
@@ -157,7 +159,7 @@ void FsaAnno::difference(FsaAnno& rhs, DifferenceExpr* expr) {
   deterministic = true;
 }
 
-FsaAnno FsaAnno::epsilon(EpsilonExpr* expr) {
+FsaAnno FsaAnno::epsilon_fsa(EpsilonExpr* expr) {
   FsaAnno r;
   r.fsa.start = 0;
   r.fsa.finals.push_back(0);
@@ -234,8 +236,8 @@ void FsaAnno::union_(FsaAnno& rhs, UnionExpr* expr) {
     fsa.adj.emplace_back(move(es));
   }
   fsa.adj.emplace_back();
-  fsa.adj[src].emplace_back(-1, old_lsrc);
-  fsa.adj[src].emplace_back(-1, ln+rhs.fsa.start);
+  fsa.adj[src].emplace_back(epsilon, old_lsrc);
+  fsa.adj[src].emplace_back(epsilon, ln+rhs.fsa.start);
   assoc.resize(fsa.n());
   REP(i, rhs.fsa.n())
     assoc[ln+i] = move(rhs.assoc[i]);
@@ -246,7 +248,7 @@ void FsaAnno::union_(FsaAnno& rhs, UnionExpr* expr) {
 
 void FsaAnno::plus(PlusExpr* expr) {
   for (long f: fsa.finals)
-    sorted_insert(fsa.adj[f], make_pair(-1L, fsa.start));
+    emplace_front(fsa.adj[f], epsilon, fsa.start);
   if (expr)
     add_assoc(*expr);
   deterministic = false;
@@ -257,8 +259,8 @@ void FsaAnno::question(QuestionExpr* expr) {
   fsa.start = src;
   fsa.adj.emplace_back();
   fsa.adj.emplace_back();
-  fsa.adj[src].emplace_back(-1, old_src);
-  fsa.adj[src].emplace_back(-1, sink);
+  fsa.adj[src].emplace_back(epsilon, old_src);
+  fsa.adj[src].emplace_back(epsilon, sink);
   fsa.finals.push_back(sink);
   assoc.resize(fsa.n());
   if (expr)
@@ -267,7 +269,7 @@ void FsaAnno::question(QuestionExpr* expr) {
 }
 
 void FsaAnno::repeat(RepeatExpr& expr) {
-  FsaAnno r = epsilon(NULL);
+  FsaAnno r = epsilon_fsa(NULL);
   REP(i, expr.low) {
     FsaAnno t = *this;
     r.concat(t, NULL);
@@ -276,7 +278,7 @@ void FsaAnno::repeat(RepeatExpr& expr) {
     star(NULL);
     r.concat(*this, NULL);
   } else if (expr.low < expr.high) {
-    FsaAnno rhs = epsilon(NULL), x = *this;
+    FsaAnno rhs = epsilon_fsa(NULL), x = *this;
     ROF(i, 0, expr.high-expr.low) {
       FsaAnno t = x;
       rhs.union_(t, NULL);
@@ -296,11 +298,11 @@ void FsaAnno::star(StarExpr* expr) {
   fsa.start = src;
   fsa.adj.emplace_back();
   fsa.adj.emplace_back();
-  fsa.adj[src].emplace_back(-1, old_src);
-  fsa.adj[src].emplace_back(-1, sink);
+  fsa.adj[src].emplace_back(epsilon, old_src);
+  fsa.adj[src].emplace_back(epsilon, sink);
   for (long f: fsa.finals) {
-    sorted_insert(fsa.adj[f], make_pair(-1L, old_src));
-    sorted_insert(fsa.adj[f], make_pair(-1L, sink));
+    sorted_emplace(fsa.adj[f], epsilon, old_src);
+    sorted_emplace(fsa.adj[f], epsilon, sink);
   }
   fsa.finals.assign(1, sink);
   assoc.resize(fsa.n());
@@ -315,8 +317,7 @@ FsaAnno FsaAnno::bracket(BracketExpr& expr) {
   r.fsa.finals = {1};
   r.fsa.adj.resize(2);
   for (auto& x: expr.intervals.to)
-    FOR(c, x.first, x.second)
-      r.fsa.adj[0].emplace_back(c, 1);
+    r.fsa.adj[0].emplace_back(x, 1);
   r.assoc.resize(2);
   r.add_assoc(expr);
   r.deterministic = true;
@@ -330,7 +331,8 @@ FsaAnno FsaAnno::collapse(CollapseExpr& expr) {
   r.fsa.start = 0;
   r.fsa.finals = {1};
   r.fsa.adj.resize(2);
-  r.fsa.adj[0].emplace_back(label++, 1);
+  r.fsa.adj[0].emplace_back(make_pair(label, label+1), 1);
+  label++;
   r.assoc.resize(2);
   r.add_assoc(expr);
   r.deterministic = true;
@@ -342,8 +344,7 @@ FsaAnno FsaAnno::dot(DotExpr* expr) {
   r.fsa.start = 0;
   r.fsa.finals = {1};
   r.fsa.adj.resize(2);
-  REP(c, AB)
-    r.fsa.adj[0].emplace_back(c, 1);
+  r.fsa.adj[0].emplace_back(make_pair(0L, AB), 1);
   r.assoc.resize(2);
   if (expr)
     r.add_assoc(*expr);
@@ -354,11 +355,24 @@ FsaAnno FsaAnno::dot(DotExpr* expr) {
 FsaAnno FsaAnno::literal(LiteralExpr& expr) {
   FsaAnno r;
   r.fsa.start = 0;
-  r.fsa.finals.assign(1, expr.literal.size());
-  r.fsa.adj.resize(expr.literal.size()+1);
-  REP(i, expr.literal.size())
-    r.fsa.adj[i].emplace_back((unsigned char)expr.literal[i], i+1);
-  r.assoc.resize(expr.literal.size()+1);
+  long len = 0;
+  if (opt_bytes) {
+    len = expr.literal.size();
+    r.fsa.adj.resize(len+1);
+    REP(i, expr.literal.size()) {
+      long c = (u8)expr.literal[i];
+      r.fsa.adj[i].emplace_back(make_pair(c, c+1), i+1);
+    }
+  } else {
+    for (i32 c, i = 0; i < expr.literal.size(); len++) {
+      U8_NEXT_OR_FFFD(expr.literal.c_str(), i, expr.literal.size(), c);
+      r.fsa.adj.emplace_back();
+      r.fsa.adj[len].emplace_back(make_pair(c, c+1), len+1);
+    }
+    r.fsa.adj.emplace_back();
+  }
+  r.fsa.finals.push_back(len);
+  r.assoc.resize(len+1);
   r.add_assoc(expr);
   r.deterministic = true;
   return r;
@@ -382,70 +396,11 @@ void FsaAnno::substring_grammar() {
         break;
       }
     if (ok || i == old_src)
-      fsa.adj[src].emplace_back(-1, i);
+      fsa.adj[src].emplace_back(epsilon, i);
     if (ok || fsa.is_final(i))
-      sorted_insert(fsa.adj[i], make_pair(-1L, sink));
+      emplace_front(fsa.adj[i], epsilon, sink);
   }
   fsa.finals.assign(1, sink);
   assoc.resize(fsa.n());
   deterministic = false;
-}
-
-FsaAnno FsaAnno::unicode_range(UnicodeRangeExpr& expr) {
-  FsaAnno r;
-  long n = 0;
-  struct Trie {
-    long id, refcnt = 1;
-    map<int, Trie*> ch;
-    ~Trie() {
-      for (auto c: ch)
-        if (! --c.second->refcnt)
-          delete c.second;
-    }
-  } root;
-  root.id = n++;
-  r.fsa.start = 0;
-
-  // build Trie
-  Trie* last = NULL;
-  FOR(i, expr.start, expr.end) {
-    u8 s[4];
-    long len = 0;
-    U8_APPEND_UNSAFE(s, len, i);
-    Trie *x = &root, *y;
-    REP(j, len) {
-      auto it = x->ch.find(s[j]);
-      if (it == x->ch.end()) {
-        if (j == len-1 && last) {
-          y = last;
-          y->refcnt++;
-        } else {
-          y = new Trie;
-          y->id = n++;
-        }
-        x->ch[s[j]] = y;
-        x = y;
-      } else
-        x = it->second;
-    }
-    if (! last)
-      last = x;
-    r.fsa.finals.push_back(x->id);
-  }
-
-  // insert edges
-  r.fsa.adj.resize(n);
-  function<void(Trie*)> dfs = [&](Trie* x) {
-    for (auto& c: x->ch) {
-      r.fsa.adj[x->id].emplace_back(c.first, c.second->id);
-      dfs(c.second);
-    }
-  };
-  dfs(&root);
-  sort(ALL(r.fsa.finals));
-
-  r.assoc.resize(n);
-  r.add_assoc(expr);
-  r.deterministic = true;
-  return r;
 }

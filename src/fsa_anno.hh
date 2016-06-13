@@ -33,7 +33,6 @@ struct FsaAnno {
   static FsaAnno bracket(BracketExpr& expr);
   static FsaAnno collapse(CollapseExpr& expr);
   static FsaAnno dot(DotExpr* expr);
-  static FsaAnno epsilon(EpsilonExpr* expr);
+  static FsaAnno epsilon_fsa(EpsilonExpr* expr);
   static FsaAnno literal(LiteralExpr& expr);
-  static FsaAnno unicode_range(UnicodeRangeExpr& expr);
 };

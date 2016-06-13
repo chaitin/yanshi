@@ -6,10 +6,15 @@ using std::function;
 using std::pair;
 using std::vector;
 
+typedef pair<long, long> Label;
+typedef pair<Label, long> Edge;
+
+const Label epsilon{-1L, 0L};
+
 struct Fsa {
   long start;
   vector<long> finals; // sorted
-  vector<vector<pair<long, long>>> adj; // sorted
+  vector<vector<Edge>> adj; // sorted
 
   long n() const { return adj.size(); }
   bool is_final(long x) const;

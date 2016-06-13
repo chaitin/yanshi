@@ -69,9 +69,26 @@ extern FILE* debug_file;
     }                                  \
   } while (0)
 
+template<class T, class... Args>
+void emplace_front(vector<T>& a, Args&&... args)
+{
+  a.emplace(a.begin(), args...);
+}
+
 template<class T>
 void sorted_insert(vector<T>& a, const T& x)
 {
+  a.emplace_back();
+  auto it = a.end();
+  while (a.begin() != --it && x < it[-1])
+    *it = it[-1];
+  *it = x;
+}
+
+template<class T, class... Args>
+void sorted_emplace(vector<T>& a, Args&&... args)
+{
+  T x{args...};
   a.emplace_back();
   auto it = a.end();
   while (a.begin() != --it && x < it[-1])
