@@ -18,6 +18,7 @@ using namespace std;
 
 static map<pair<dev_t, ino_t>, Module> inode2module;
 static unordered_map<DefineStmt*, vector<DefineStmt*>> depended_by; // key ranges over all DefineStmt
+map<string, long> macro;
 FILE* output;
 
 void print_module_info(Module& mo)
@@ -49,10 +50,16 @@ struct ModuleImportDef : PreorderStmtVisitor {
     }
     mo.defined_action[stmt.ident] = stmt.code;
   }
+  // TODO report error: import 'aa.hs' (#define d 3) ; #define d 4
   void visit(DefineStmt& stmt) override {
-    mo.defined.emplace(stmt.lhs, &stmt);
-    stmt.module = &mo;
-    depended_by[&stmt]; // empty
+    if (mo.defined.count(stmt.lhs) || macro.count(stmt.lhs)) {
+      n_errors++;
+      mo.locfile.error(stmt.loc, "redefined '%s'", stmt.lhs.c_str());
+    } else {
+      mo.defined.emplace(stmt.lhs, &stmt);
+      stmt.module = &mo;
+      depended_by[&stmt]; // empty
+    }
   }
   void visit(ImportStmt& stmt) override {
     Module* m = load_module(n_errors, stmt.filename);
@@ -65,6 +72,13 @@ struct ModuleImportDef : PreorderStmtVisitor {
       mo.qualified_import[stmt.qualified] = m;
     else if (count(ALL(mo.unqualified_import), m) == 0)
       mo.unqualified_import.push_back(m);
+  }
+  void visit(PreprocessDefineStmt& stmt) override {
+    if (mo.defined.count(stmt.ident) || macro.count(stmt.ident)) {
+      n_errors++;
+      mo.locfile.error(stmt.loc, "redefined '%s'", stmt.ident.c_str());
+    } else
+      macro[stmt.ident] = stmt.value;
   }
 };
 
@@ -183,6 +197,10 @@ struct ModuleUse : PrePostActionExprStmtVisitor {
         }
       }
     } else {
+      if (macro.count(expr.ident)) {
+        expr.define_stmt = NULL;
+        return;
+      }
       auto it = mo.defined.find(expr.ident);
       bool found = it != mo.defined.end();
       for (auto& import: mo.unqualified_import) {

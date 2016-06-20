@@ -26,4 +26,5 @@ struct Module {
 long load(const string& filename);
 Module* load_module(long& n_errors, const string& filename);
 void unload_all();
+extern map<string, long> macro;
 extern FILE* output;

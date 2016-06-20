@@ -22,6 +22,7 @@ syn region yanshiBracket start='\[' skip=+\\\\\|\\]+ end=']'
 syn region yanshiComment start='/\*' end='\*/' keepend contains=@yanshiCommentGroup,@Spell
 syn region yanshiImported display contained start="+" skip=+\\\\\|\\"+ end=+"+
 syn region yanshiLineComment start='#\|//' skip='\\$' end='$' keepend contains=@yanshiCommentGroup,@Spell
+syn region yanshiPreprocess start="#define" skip="\\$" end="$" keepend
 syn region yanshiQQString start=+"+ skip=+\\.+ end=+"+ contains=yanshiSpecial
 syn region yanshiQString start=+'+ skip=+\\.+ end=+'+
 
@@ -57,6 +58,7 @@ hi def link yanshiImported       String
 hi def link yanshiLineComment    Comment
 hi def link yanshiLowOp          Conditional
 hi def link yanshiMacro          Macro
+hi def link yanshiPreprocess     Macro
 hi def link yanshiQQString       String
 hi def link yanshiQString        String
 hi def link yanshiSpecial        SpecialChar

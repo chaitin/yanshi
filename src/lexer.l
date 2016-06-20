@@ -69,9 +69,15 @@ static int unexpected_codepoint(YYSTYPE* yylval)
   yylval->errmsg = aprintf("cannot use Unicode codepoints");
   return INVALID_CHARACTER;
 }
+
+extern "C" int raw_yywrap(yyscan_t yyscanner)
+{
+  semicolon = false;
+  return 1;
+}
 %}
 
-%option noyywrap nounput noinput
+%option yywrap nounput noinput
 %option reentrant
 %option extra-type="long"
 %option bison-bridge bison-locations
@@ -111,6 +117,7 @@ L			[a-zA-Z_\x80-\xff]
 "nosemicolon" semicolon = false;
 {L}({L}|{D})* yylval->str = new string(yytext); return IDENT;
 {D}+ yylval->integer = atol(yytext); return INTEGER;
+"#define" return PREPROCESS_DEFINE;
 
 "#" yy_push_state(IN_LINE_COMMENT, yyscanner);
 "//" yy_push_state(IN_LINE_COMMENT, yyscanner);

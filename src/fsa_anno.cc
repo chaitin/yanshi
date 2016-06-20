@@ -1,5 +1,7 @@
 #include "common.hh"
+#include "compiler.hh"
 #include "fsa_anno.hh"
+#include "loader.hh"
 #include "option.hh"
 
 #include <algorithm>
@@ -350,6 +352,25 @@ FsaAnno FsaAnno::dot(DotExpr* expr) {
     r.add_assoc(*expr);
   r.deterministic = true;
   return r;
+}
+
+FsaAnno FsaAnno::embed(EmbedExpr& expr) {
+  if (expr.define_stmt) {
+    FsaAnno r = compiled[expr.define_stmt];
+    r.add_assoc(expr);
+    return r;
+  } else { // macro
+    FsaAnno r;
+    r.fsa.start = 0;
+    r.fsa.finals = {1};
+    r.fsa.adj.resize(2);
+    long c = macro[expr.ident];
+    r.fsa.adj[0].emplace_back(make_pair(c, c+1), 1);
+    r.assoc.resize(2);
+    r.add_assoc(expr);
+    r.deterministic = true;
+    return r;
+  }
 }
 
 FsaAnno FsaAnno::literal(LiteralExpr& expr) {

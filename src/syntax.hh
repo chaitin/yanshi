@@ -8,6 +8,7 @@
 #include <string>
 #include <typeinfo>
 #include <vector>
+using std::move;
 using std::string;
 using std::vector;
 
@@ -80,6 +81,7 @@ struct CppStmt;
 struct DefineStmt;
 struct EmptyStmt;
 struct ImportStmt;
+struct PreprocessDefineStmt;
 template<>
 struct Visitor<Stmt> {
   virtual void visit(Stmt&) = 0;
@@ -88,6 +90,7 @@ struct Visitor<Stmt> {
   virtual void visit(DefineStmt&) = 0;
   virtual void visit(EmptyStmt&) = 0;
   virtual void visit(ImportStmt&) = 0;
+  virtual void visit(PreprocessDefineStmt&) = 0;
 };
 
 //// Action
@@ -282,6 +285,12 @@ struct ImportStmt : Visitable<Stmt, ImportStmt> {
   ImportStmt(string& filename, string& qualified) : filename(move(filename)), qualified(move(qualified)) {}
 };
 
+struct PreprocessDefineStmt : Visitable<Stmt, PreprocessDefineStmt> {
+  string ident;
+  long value;
+  PreprocessDefineStmt(string& ident, long value) : ident(move(ident)), value(value) {}
+};
+
 void stmt_free(Stmt* stmt);
 
 //// Visitor implementations
@@ -453,6 +462,10 @@ struct StmtPrinter : Visitor<Action>, Visitor<Expr>, Visitor<Stmt> {
     if (stmt.qualified.size())
       printf("%*sas %s\n", 2*(depth+1), "", stmt.qualified.c_str());
   }
+  void visit(PreprocessDefineStmt& stmt) override {
+    printf("%*s%s\n", 2*depth, "", "PreprocessDefineStmt");
+    printf("%*s%s %ld\n", 2*(depth+1), "", stmt.ident.c_str(), stmt.value);
+  }
 };
 
 //// Visitor implementation
@@ -464,6 +477,7 @@ struct PreorderStmtVisitor : Visitor<Stmt> {
   void visit(DefineStmt& stmt) override {}
   void visit(EmptyStmt& stmt) override {}
   void visit(ImportStmt& stmt) override {}
+  void visit(PreprocessDefineStmt&) override {}
 };
 
 struct PrePostActionExprStmtVisitor : Visitor<Action>, Visitor<Expr>, Visitor<Stmt> {
@@ -525,4 +539,5 @@ struct PrePostActionExprStmtVisitor : Visitor<Action>, Visitor<Expr>, Visitor<St
   void visit(DefineStmt& stmt) override { stmt.rhs->accept(*this); }
   void visit(EmptyStmt& stmt) override {}
   void visit(ImportStmt& stmt) override {}
+  void visit(PreprocessDefineStmt&) override {}
 };

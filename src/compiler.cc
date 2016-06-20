@@ -12,7 +12,7 @@
 #include <unordered_map>
 using namespace std;
 
-static map<DefineStmt*, FsaAnno> compiled;
+map<DefineStmt*, FsaAnno> compiled;
 
 static void print_assoc(const FsaAnno& anno)
 {
@@ -132,9 +132,7 @@ struct Compiler : Visitor<Expr> {
     st.push(FsaAnno::dot(&expr));
   }
   void visit(EmbedExpr& expr) override {
-    FsaAnno anno = compiled[expr.define_stmt];
-    anno.add_assoc(expr);
-    st.push(anno);
+    st.push(FsaAnno::embed(expr));
   }
   void visit(EpsilonExpr& expr) override {
     st.push(FsaAnno::epsilon_fsa(&expr));

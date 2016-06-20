@@ -51,7 +51,7 @@ int parse(const LocationFile& locfile, Stmt*& res);
 %destructor { delete $$; } <intervals>
 %destructor { delete $$; } <stmt>
 
-%token ACTION AS COLONCOLON CPP DOTDOT EPSILON EXPORT IMPORT INTACT INVALID_CHARACTER
+%token ACTION AS COLONCOLON CPP DOTDOT EPSILON EXPORT IMPORT INTACT INVALID_CHARACTER PREPROCESS_DEFINE
 %token <integer> CHAR INTEGER
 %token <str> IDENT
 %token <str> BRACED_CODE
@@ -63,7 +63,7 @@ int parse(const LocationFile& locfile, Stmt*& res);
 %type <action> action
 %type <expr> concat_expr difference_expr factor repeat intersect_expr union_expr unop_expr
 %type <intervals> bracket bracket_items
-%type <stmt> define_stmt stmt stmt_list
+%type <stmt> define_stmt preprocess stmt stmt_list
 
 %{
 #include "lexer.hh"
@@ -113,10 +113,14 @@ stmt_list:
 
 stmt:
     define_stmt { $$ = $1; }
+  | preprocess { $$ = $1; }
   | IMPORT STRING_LITERAL AS IDENT { $$ = new ImportStmt(*$2, *$4); delete $2; delete $4; $$->loc = yyloc; }
   | IMPORT STRING_LITERAL { string t; $$ = new ImportStmt(*$2, t); delete $2; $$->loc = yyloc; }
   | ACTION IDENT BRACED_CODE { $$ = new ActionStmt(*$2, *$3); delete $2; delete $3; $$->loc = yyloc; }
   | CPP BRACED_CODE { $$ = new CppStmt(*$2); delete $2; $$->loc = yyloc; }
+
+preprocess:
+    PREPROCESS_DEFINE IDENT INTEGER { $$ = new PreprocessDefineStmt(*$2, $3); delete $2; $$->loc = yyloc; }
 
 define_stmt:
     IDENT '=' union_expr { $$ = new DefineStmt(*$1, $3); delete $1; $$->loc = yyloc; }
