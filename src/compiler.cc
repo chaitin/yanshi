@@ -223,6 +223,8 @@ void compile_actions(DefineStmt* stmt)
 #undef D
 #define D(S)
 
+  if (output_header)
+    fprintf(output_header, "long yanshi_%s_transit(long u, long c);\n", stmt->lhs.c_str());
   fprintf(output, "long yanshi_%s_transit(long u, long c)\n", stmt->lhs.c_str());
   fprintf(output, "{\n");
   indent(output, 1);
@@ -475,6 +477,8 @@ void generate_cxx_export(DefineStmt* stmt)
   compile_export(stmt);
   FsaAnno& anno = compiled[stmt];
 
+  if (output_header)
+    fprintf(output_header, "void yanshi_%s_init(long& start, vector<long>& finals);\n", stmt->lhs.c_str());
   fprintf(output, "void yanshi_%s_init(long& start, vector<long>& finals)\n", stmt->lhs.c_str());
   fprintf(output, "{\n");
   indent(output, 1);
@@ -505,6 +509,13 @@ void generate_cxx(Module* mo)
 "#include <cstdio>\n"
 "using namespace std;\n"
 , output);
+  }
+  if (output_header) {
+    fputs(
+"#pragma once\n"
+"#include <vector>\n"
+"using std::vector;\n"
+, output_header);
   }
   fprintf(output, "\n");
   for (Stmt* x = mo->toplevel; x; x = x->next)

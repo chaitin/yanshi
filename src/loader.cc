@@ -19,7 +19,7 @@ using namespace std;
 static map<pair<dev_t, ino_t>, Module> inode2module;
 static unordered_map<DefineStmt*, vector<DefineStmt*>> depended_by; // key ranges over all DefineStmt
 map<string, long> macro;
-FILE* output;
+FILE *output, *output_header;
 
 void print_module_info(Module& mo)
 {
@@ -139,7 +139,10 @@ struct ModuleUse : PrePostActionExprStmtVisitor {
     }
   }
 
-  void visit(BracketExpr& expr) override {}
+  void visit(BracketExpr& expr) override {
+    for (auto& x: expr.intervals.to)
+      AB = max(AB, x.second);
+  }
   void visit(CollapseExpr& expr) override {
     if (expr.qualified.size()) {
       if (! mo.qualified_import.count(expr.qualified)) {
@@ -199,6 +202,7 @@ struct ModuleUse : PrePostActionExprStmtVisitor {
     } else {
       if (macro.count(expr.ident)) {
         expr.define_stmt = NULL;
+        AB = max(AB, macro[expr.ident]+1);
         return;
       }
       auto it = mo.defined.find(expr.ident);
@@ -421,8 +425,18 @@ long load(const string& filename)
   }
 
   if (! strcmp(opt_mode, "c++")) {
+    if (opt_output_header_filename) {
+      output_header = fopen(opt_output_header_filename, "w");
+      if (! output_header) {
+        n_errors++;
+        err_exit(EX_OSFILE, "fopen", opt_output_header_filename);
+        return n_errors;
+      }
+    }
     DP(1, "Generating C++");
     generate_cxx(mo);
+    if (output_header)
+      fclose(output_header);
   } else {
     DP(1, "Generating Graphviz dot");
     generate_graphviz(mo);

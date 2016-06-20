@@ -33,6 +33,7 @@ void print_help(FILE *fh)
         "  -I,--import <dir>         add <dir> to search path for 'import'\n"
         "  -S,--standalone           generate header and 'main()'\n"
         "  --substring-grammar       construct regular approximation of the substring grammar. Inner states of nonterminals labeled 'intact' are not connected to start/final\n"
+        "  -O,--output-header <file> .hh output filename\n"
         "  -o,--output <file>        .cc output filename\n"
         "  -h, --help                display this help and exit\n"
         "\n"
@@ -59,14 +60,16 @@ int main(int argc, char *argv[])
     {"standalone",          no_argument,       0,   'S'},
     {"substring-grammar",   no_argument,       0,   's'},
     {"output",              required_argument, 0,   'o'},
+    {"output-header",       required_argument, 0,   'O'},
     {"help",                no_argument,       0,   'h'},
     {0,                     0,                 0,   0},
   };
 
-  while ((opt = getopt_long(argc, argv, "bDcd:GhI:l:o:Ss", long_options, NULL)) != -1) {
+  while ((opt = getopt_long(argc, argv, "bDcd:GhI:l:O:o:Ss", long_options, NULL)) != -1) {
     switch (opt) {
     case 'b':
       opt_bytes = true;
+      AB = 256;
       break;
     case 'D':
       break;
@@ -91,6 +94,9 @@ int main(int argc, char *argv[])
       debug_file = fopen(optarg, "w");
       if (! debug_file)
         err_exit(EX_OSFILE, "fopen");
+      break;
+    case 'O':
+      opt_output_header_filename = optarg;
       break;
     case 'o':
       opt_output_filename = optarg;

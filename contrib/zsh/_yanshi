@@ -14,6 +14,7 @@ _arguments \
   '(-I --import)'{-I,--import}'=[add <dir> to search path for "import"]' \
   '(-l --debug-output)'{-l,--debug-output}'[filename for debug output]:file:_files' \
   '(-o --output)'{-o,--output}'[.cc output filename]:file:_files' \
+  '(-O --output-header)'{-O,--output-header}'[.hh output filename]:file:_files' \
   '(-s --substring-grammar)'{-s,--substring-grammar}'=[construct regular approximation of the substring grammar. Inner states of nonterminals labeled 'intact' are not connected to start/final]' \
   '(-h --help)'{-h,--help}'=[display this help]' \
   '1:file:_files -g "*.{ys,yanshi}"'\

@@ -8,5 +8,6 @@ long AB = MAX_CODEPOINT+1;
 long debug_level = 3;
 FILE* debug_file;
 const char* opt_output_filename = "-";
+const char* opt_output_header_filename;
 const char* opt_mode = "c++";
 vector<string> opt_include_paths;

@@ -157,7 +157,17 @@ factor:
   | '!' IDENT COLONCOLON IDENT { $$ = new CollapseExpr(*$2, *$4); delete $2; delete $4; $$->loc = yyloc; }
   | STRING_LITERAL { $$ = new LiteralExpr(*$1); delete $1; $$->loc = yyloc; }
   | '.' { $$ = new DotExpr(); $$->loc = yyloc; }
-  | INTEGER { auto t = new DisjointIntervals; t->emplace($1, $1+1); $$ = new BracketExpr(t); $$->loc = yyloc; }
+  | INTEGER {
+      if (opt_bytes && 256 <= $1) {
+        FAIL(yyloc, "literal integers should be less than 256 in bytes mode");
+        $$ = new DotExpr;
+      } else {
+        auto t = new DisjointIntervals;
+        t->emplace($1, $1+1);
+        $$ = new BracketExpr(t);
+        $$->loc = yyloc;
+      }
+    }
   | bracket { $$ = new BracketExpr($1); $$->loc = yyloc; }
   | STRING_LITERAL DOTDOT STRING_LITERAL {
       i32 c0, c1, i = 0, j = 0;
