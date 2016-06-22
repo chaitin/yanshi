@@ -77,7 +77,7 @@ extern "C" int raw_yywrap(yyscan_t yyscanner)
 }
 %}
 
-%option yywrap nounput noinput
+%option yywrap noinput
 %option reentrant
 %option extra-type="long"
 %option bison-bridge bison-locations
@@ -122,7 +122,7 @@ L			[a-zA-Z_\x80-\xff]
 "#" yy_push_state(IN_LINE_COMMENT, yyscanner);
 "//" yy_push_state(IN_LINE_COMMENT, yyscanner);
 <IN_LINE_COMMENT>{
-  "\n" yy_pop_state(yyscanner);
+  "\n" yy_pop_state(yyscanner); unput('\n');
   <<EOF>> yy_pop_state(yyscanner);
   . {}
 }
@@ -310,6 +310,7 @@ L			[a-zA-Z_\x80-\xff]
   .|\n tmp_str += yytext[0]; tmp_bracket += yytext[0];
 }
 
+\\\n {}
 "\n" if (YY_START == INITIAL && ! semicolon) return '\n';
 [ \t]+ {}
 . { yylval->errmsg = strdup("invalid character"); return INVALID_CHARACTER; }

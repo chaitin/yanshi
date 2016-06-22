@@ -99,6 +99,9 @@ struct Compiler : Visitor<Expr> {
   void post_expr(Expr& expr) {
     path.pop();
     expr.post = tick;
+#ifdef DEBUG
+    st.top().fsa.check();
+#endif
   }
 
   void visit(Expr& expr) override {

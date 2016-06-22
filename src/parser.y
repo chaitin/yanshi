@@ -57,11 +57,8 @@ int parse(const LocationFile& locfile, Stmt*& res);
 %token <str> BRACED_CODE
 %token <str> STRING_LITERAL
 
-%nonassoc IDENT
-%nonassoc '.'
-
 %type <action> action
-%type <expr> concat_expr difference_expr factor repeat intersect_expr union_expr unop_expr
+%type <expr> concat_expr difference_expr factor repeat intersect_expr union_expr union_expr2 unop_expr
 %type <intervals> bracket bracket_items
 %type <stmt> define_stmt preprocess stmt stmt_list
 
@@ -108,30 +105,40 @@ toplevel:
 stmt_list:
     %empty { $$ = new EmptyStmt; }
   | '\n' stmt_list { $$ = $2; }
-  | stmt '\n' stmt_list { $1->next = $3; $3->prev = $1; $$ = $1; }
-  | error '\n' stmt_list { $$ = $3; }
+  | stmt stmt_list { $1->next = $2; $2->prev = $1; $$ = $1; }
+  | error stmt_list { $$ = $2; }
 
 stmt:
     define_stmt { $$ = $1; }
-  | preprocess { $$ = $1; }
-  | IMPORT STRING_LITERAL AS IDENT { $$ = new ImportStmt(*$2, *$4); delete $2; delete $4; $$->loc = yyloc; }
-  | IMPORT STRING_LITERAL { string t; $$ = new ImportStmt(*$2, t); delete $2; $$->loc = yyloc; }
-  | ACTION IDENT BRACED_CODE { $$ = new ActionStmt(*$2, *$3); delete $2; delete $3; $$->loc = yyloc; }
-  | CPP BRACED_CODE { $$ = new CppStmt(*$2); delete $2; $$->loc = yyloc; }
+  | preprocess '\n' { $$ = $1; }
+  | IMPORT STRING_LITERAL AS IDENT '\n' { $$ = new ImportStmt(*$2, *$4); delete $2; delete $4; $$->loc = yyloc; }
+  | IMPORT STRING_LITERAL '\n' { string t; $$ = new ImportStmt(*$2, t); delete $2; $$->loc = yyloc; }
+  | ACTION IDENT BRACED_CODE '\n' { $$ = new ActionStmt(*$2, *$3); delete $2; delete $3; $$->loc = yyloc; }
+  | CPP BRACED_CODE '\n' { $$ = new CppStmt(*$2); delete $2; $$->loc = yyloc; }
 
 preprocess:
     PREPROCESS_DEFINE IDENT INTEGER { $$ = new PreprocessDefineStmt(*$2, $3); delete $2; $$->loc = yyloc; }
 
+eq:
+    '='
+  | ':'
+
 define_stmt:
-    IDENT '=' union_expr { $$ = new DefineStmt(*$1, $3); delete $1; $$->loc = yyloc; }
-  | IDENT ':' union_expr { $$ = new DefineStmt(*$1, $3); delete $1; $$->loc = yyloc; }
-  | IDENT ':' '|' union_expr { $$ = new DefineStmt(*$1, $4); delete $1; $$->loc = yyloc; }
+    IDENT eq union_expr '\n' { $$ = new DefineStmt(*$1, $3); delete $1; $$->loc = yyloc; }
+  | IDENT eq '|' union_expr '\n' { $$ = new DefineStmt(*$1, $4); delete $1; $$->loc = yyloc; }
+  | IDENT eq '\n' union_expr2 '\n' { $$ = new DefineStmt(*$1, $4); delete $1; $$->loc = yyloc; }
+  | IDENT eq '\n' '|' union_expr2 '\n' { $$ = new DefineStmt(*$1, $5); delete $1; $$->loc = yyloc; }
   | EXPORT define_stmt { $$ = $2; ((DefineStmt*)$$)->export_ = true; $$->loc = yyloc; }
   | INTACT define_stmt { $$ = $2; ((DefineStmt*)$$)->intact = true; $$->loc = yyloc; }
 
 union_expr:
     intersect_expr { $$ = $1; }
   | union_expr '|' intersect_expr { $$ = new UnionExpr($1, $3); $$->loc = yyloc; }
+
+union_expr2:
+    intersect_expr { $$ = $1; }
+  | union_expr2 '|' intersect_expr { $$ = new UnionExpr($1, $3); $$->loc = yyloc; }
+  | union_expr2 '\n' '|' intersect_expr { $$ = new UnionExpr($1, $4); $$->loc = yyloc; }
 
 intersect_expr:
     difference_expr { $$ = $1; }

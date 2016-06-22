@@ -3,10 +3,12 @@
 #include "option.hh"
 
 #include <algorithm>
+#include <assert.h>
 #include <limits.h>
 #include <queue>
 #include <set>
 #include <stack>
+#include <tuple>
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
@@ -25,6 +27,15 @@ namespace std
       return r;
     }
   };
+}
+
+void Fsa::check() const
+{
+  REP(i, n())
+    FOR(j, 1, adj[i].size())
+      assert(adj[i][j-1].first.second == 0 &&
+             adj[i][j].first.second == 0 ||
+             adj[i][j-1].first.second <= adj[i][j].first.first);
 }
 
 bool Fsa::has(long u, long a) const
@@ -82,7 +93,6 @@ Fsa Fsa::operator~() const
     if (j < AB)
       r.adj[i].emplace_back(make_pair(j, AB), accept);
   }
-  r.adj.emplace_back();
   r.adj[accept].emplace_back(make_pair(0, AB), accept);
   vector<long> new_finals;
   auto j = finals.begin();
@@ -280,6 +290,7 @@ Fsa Fsa::determinize(function<void(long, const vector<long>&)> relate) const
   unordered_map<vector<long>, long> m;
   vector<vector<Edge>::const_iterator> its(n());
   vector<long> vs{start};
+  vector<pair<long, long>> events;
   epsilon_closure(vs);
   m[vs] = 0;
   stack<vector<long>> st;
@@ -288,53 +299,46 @@ Fsa Fsa::determinize(function<void(long, const vector<long>&)> relate) const
     vector<long> x = move(st.top());
     st.pop();
     long id = m[x];
-    if (id+1 > r.adj.size()) {
+    if (id+1 > r.adj.size())
       r.adj.resize(id+1);
-      //DP(5, "%zd %ld", r.adj.size(), x.size());
-    }
     relate(id, x);
     bool final = false;
+    events.clear();
     for (long u: x) {
       if (is_final(u))
         final = true;
-      its[u] = adj[u].begin();
+      for (auto& e: adj[u]) {
+        events.emplace_back(e.first.first, e.second);
+        events.emplace_back(e.first.second, ~ e.second);
+      }
     }
     if (final)
       r.finals.push_back(id);
-    long last = INT_MIN;
-    for(;;) {
-      // find minimum transition
-      long from = LONG_MAX, to = LONG_MAX;
-      for (long u: x) {
-        while (its[u] != adj[u].end() && its[u]->first.second <= last)
-          ++its[u];
-        for (auto it = its[u]; it != adj[u].end() && max(last, its[u]->first.first) == max(last, it->first.first); ++it) {
-          long c = max(last, it->first.first);
-          if (c < from) {
-            to = min(from, it->first.second);
-            from = c;
-          } else if (from < c && c < to)
-            to = c;
+    long last = 0;
+    multiset<long> live;
+    sort(ALL(events));
+    for (auto& ev: events) {
+      if (last < ev.first) {
+        if (live.size()) {
+          vs.assign(ALL(live));
+          vs.erase(unique(ALL(vs)), vs.end());
+          epsilon_closure(vs);
+          auto mit = m.find(vs);
+          if (mit == m.end()) {
+            mit = m.emplace(vs, m.size()).first;
+            st.push(vs);
+          }
+          if (r.adj[id].size() && r.adj[id].back().first.second == last && r.adj[id].back().second == mit->second) // coalesce two edges
+            r.adj[id].back().first.second = ev.first;
+          else
+            r.adj[id].emplace_back(make_pair(last, ev.first), mit->second);
         }
+        last = ev.first;
       }
-      if (from == LONG_MAX) break;
-      last = to;
-      // skip epsilon transitions
-      if (! to) continue;
-      // successors
-      vs.clear();
-      for (long u: x)
-        for (auto it = its[u]; it != adj[u].end() && it->first.first <= from; ++it)
-          vs.push_back(it->second);
-      sort(ALL(vs));
-      vs.erase(unique(ALL(vs)), vs.end());
-      epsilon_closure(vs);
-      auto mit = m.find(vs);
-      if (mit == m.end()) {
-        mit = m.emplace(vs, m.size()).first;
-        st.push(vs);
-      }
-      r.adj[id].emplace_back(make_pair(from, to), mit->second);
+      if (ev.second >= 0)
+        live.insert(ev.second);
+      else
+        live.erase(live.find(~ ev.second));
     }
   }
   sort(ALL(r.finals));

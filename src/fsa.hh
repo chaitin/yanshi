@@ -16,6 +16,7 @@ struct Fsa {
   vector<long> finals; // sorted
   vector<vector<Edge>> adj; // sorted
 
+  void check() const;
   long n() const { return adj.size(); }
   bool is_final(long x) const;
   bool has(long u, long a) const;
