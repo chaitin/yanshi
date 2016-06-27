@@ -35,6 +35,8 @@ typedef uint64_t u64;
 #define MAGENTA "\x1b[1;35m"
 #define CYAN "\x1b[1;36m"
 const long MAX_CODEPOINT = 0x10ffff;
+const long ACTION_LABEL_BASE = MAX_CODEPOINT+1;
+const long COLLAPSE_LABEL_BASE = ACTION_LABEL_BASE+1000000;
 
 void blue();
 void cyan();

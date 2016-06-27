@@ -21,7 +21,11 @@ static void print_assoc(const FsaAnno& anno)
     printf("%ld:", i);
     for (auto aa: anno.assoc[i]) {
       auto a = aa.first;
-      printf(" %s(%ld-%ld", a->name().c_str(), a->loc.start, a->loc.end);
+      printf(" %s%s%s%s(%ld-%ld", a->name().c_str(),
+             long(aa.second) & long(ExprTag::start) ? "^" : "",
+             long(aa.second) & long(ExprTag::inner) ? "." : "",
+             long(aa.second) & long(ExprTag::final) ? "$" : "",
+             a->loc.start, a->loc.end);
       if (a->entering.size())
         printf(",>%zd", a->entering.size());
       if (a->leaving.size())
@@ -218,13 +222,18 @@ void compile_actions(DefineStmt* stmt)
     return string();
   };
 
-#define D(S) \
-            if (auto t = dynamic_cast<InlineAction*>(action)) \
-              printf(S " %ld %ld %ld %s\n", u, e.first, v, t->code.c_str()); \
-            else if (auto t = dynamic_cast<RefAction*>(action)) \
-              printf(S " %ld %ld %ld %s\n", u, e.first, v, t->define_module->defined_action[t->ident].c_str());
-#undef D
-#define D(S)
+#define D(S) if (opt_dump_action) { \
+               if (auto t = dynamic_cast<InlineAction*>(action)) \
+                 if (from == to-1) \
+                   printf(S " %ld %ld %ld %s\n", u, from, v, t->code.c_str()); \
+                 else \
+                   printf(S " %ld %ld-%ld %ld %s\n", u, from, to-1, v, t->code.c_str()); \
+               else if (auto t = dynamic_cast<RefAction*>(action)) \
+                 if (from == to-1) \
+                   printf(S " %ld %ld %ld %s\n", u, from, v, t->define_module->defined_action[t->ident].c_str()); \
+                 else \
+                   printf(S " %ld %ld-%ld %ld %s\n", u, from, to-1, v, t->define_module->defined_action[t->ident].c_str()); \
+             }
 
   if (output_header)
     fprintf(output_header, "long yanshi_%s_transit(long u, long c);\n", stmt->lhs.c_str());
@@ -358,10 +367,10 @@ void compile_export(DefineStmt* stmt)
             sorted_emplace(adj[i], epsilon, stmt2offset[v]+compiled[v].fsa.start);
           }
         long j = adj[i].size();
-        while (j && AB < adj[i][j-1].first.second) {
+        while (j && COLLAPSE_LABEL_BASE < adj[i][j-1].first.second) {
           long v = adj[i][j-1].second;
-          if (adj[i][j-1].first.first < AB)
-            adj[i][j-1].first.second = AB;
+          if (adj[i][j-1].first.first < COLLAPSE_LABEL_BASE)
+            adj[i][j-1].first.second = COLLAPSE_LABEL_BASE;
           else
             j--;
           for (auto aa: assoc[v])
@@ -406,6 +415,17 @@ void compile_export(DefineStmt* stmt)
   DP(3, "Keep co-accessible states");
   anno.co_accessible();
   DP(3, "# of states: %ld", anno.fsa.n());
+
+  DP(3, "Removing action labels");
+  REP(i, anno.fsa.n()) {
+    long j = anno.fsa.adj[i].size();
+    while (j && ACTION_LABEL_BASE < anno.fsa.adj[i][j-1].first.second)
+      if (anno.fsa.adj[i][j-1].first.first < ACTION_LABEL_BASE)
+        anno.fsa.adj[i][j-1].first.second = ACTION_LABEL_BASE;
+      else
+        j--;
+    anno.fsa.adj[i].resize(j);
+  }
 
   if (opt_dump_automaton)
     print_automaton(anno.fsa);

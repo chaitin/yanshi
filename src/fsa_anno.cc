@@ -11,6 +11,9 @@
 #include <utility>
 using namespace std;
 
+static long action_label = ACTION_LABEL_BASE,
+            collapse_label = COLLAPSE_LABEL_BASE;
+
 bool operator<(ExprTag x, ExprTag y)
 {
   return long(x) < long(y);
@@ -54,6 +57,18 @@ void FsaAnno::add_assoc(Expr& expr)
       tag = ExprTag::inner;
     sorted_insert(assoc[i], make_pair(&expr, tag));
   }
+  // Add pseudo transitions with labels [ACTION_LABEL_BASE, COLLAPSE_LABEL_BASE) to prevent its merge with other states
+  if (expr.leaving.size() || expr.entering.size() || expr.transiting.size())
+    for (auto action: expr.transiting)
+      REP(i, fsa.n()) {
+        fsa.adj[i].emplace_back(make_pair(action_label, action_label+1), i);
+        action_label++;
+      }
+  else if (expr.finishing.size())
+    for (long f: fsa.finals) {
+      fsa.adj[f].emplace_back(make_pair(action_label, action_label+1), f);
+      action_label++;
+    }
 }
 
 void FsaAnno::accessible() {
@@ -328,13 +343,12 @@ FsaAnno FsaAnno::bracket(BracketExpr& expr) {
 
 FsaAnno FsaAnno::collapse(CollapseExpr& expr) {
   // represented by (0, special, 1)
-  static long label = AB;
   FsaAnno r;
   r.fsa.start = 0;
   r.fsa.finals = {1};
   r.fsa.adj.resize(2);
-  r.fsa.adj[0].emplace_back(make_pair(label, label+1), 1);
-  label++;
+  r.fsa.adj[0].emplace_back(make_pair(collapse_label, collapse_label+1), 1);
+  collapse_label++;
   r.assoc.resize(2);
   r.add_assoc(expr);
   r.deterministic = true;
