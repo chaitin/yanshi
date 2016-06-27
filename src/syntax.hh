@@ -271,7 +271,7 @@ struct CppStmt : Visitable<Stmt, CppStmt> {
 
 struct DefineStmt : Visitable<Stmt, DefineStmt> {
   bool export_ = false, intact = false;
-  string lhs;
+  string export_params, lhs;
   Expr* rhs;
   Module* module; // used in topological sort
   DefineStmt(string& lhs, Expr* rhs) : lhs(move(lhs)), rhs(rhs) {}
@@ -449,7 +449,10 @@ struct StmtPrinter : Visitor<Action>, Visitor<Expr>, Visitor<Stmt> {
   void visit(DefineStmt& stmt) override {
     printf("%*s%s%s\n", 2*depth, "", "DefineStmt", stmt.export_ ? " export" : "");
     depth++;
-    printf("%*s%s\n", 2*depth, "", stmt.lhs.c_str());
+    indent(stdout, depth);
+    if (stmt.export_params.size())
+      printf("(%s) ", stmt.export_params.c_str());
+    printf("%s\n", stmt.lhs.c_str());
     visit(*stmt.rhs);
     depth--;
   }

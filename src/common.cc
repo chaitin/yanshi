@@ -48,6 +48,8 @@ static const char *ENAME[] = {
 
 #define MAX_ENAME 133
 
+long action_label_base, action_label, collapse_label_base, collapse_label;
+
 void output_error(bool use_err, const char *format, va_list ap)
 {
   char text[BUF_SIZE], msg[BUF_SIZE], buf[BUF_SIZE];

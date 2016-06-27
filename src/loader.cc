@@ -413,6 +413,10 @@ long load(const string& filename)
   if (opt_check)
     return 0;
 
+  // AB has been updated by ModuleUse
+  action_label_base = action_label = AB;
+  collapse_label_base = collapse_label = action_label+1000000;
+
   DP(1, "Compiling DefineStmt");
   for (auto stmt: topo)
     compile(stmt);

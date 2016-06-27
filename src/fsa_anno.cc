@@ -11,9 +11,6 @@
 #include <utility>
 using namespace std;
 
-static long action_label = ACTION_LABEL_BASE,
-            collapse_label = COLLAPSE_LABEL_BASE;
-
 bool operator<(ExprTag x, ExprTag y)
 {
   return long(x) < long(y);

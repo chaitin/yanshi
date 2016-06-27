@@ -85,7 +85,8 @@ extern "C" int raw_yywrap(yyscan_t yyscanner)
 %option stack
 
 %x EXPECT_CODE
-%x EXPECT_ACTION
+%x AFTER_ACTION_OP
+%x AFTER_EXPORT
 %x IN_BRACE
 %x IN_CODE
 %x IN_COMMENT
@@ -110,7 +111,7 @@ L			[a-zA-Z_\x80-\xff]
 "as" return AS;
 "c++" yy_push_state(EXPECT_CODE, yyscanner); return CPP;
 "epsilon" return EPSILON;
-"export" return EXPORT;
+"export" yy_push_state(AFTER_EXPORT, yyscanner); return EXPORT;
 "import" return IMPORT;
 "intact" return INTACT;
 "semicolon" semicolon = true;
@@ -208,16 +209,23 @@ L			[a-zA-Z_\x80-\xff]
   <<EOF>> yy_pop_state(yyscanner); unexpected_eof(yylval, "]");
 }
 
-<EXPECT_CODE>{
-  {L}({L}|{D})* yylval->str = new string(yytext); return IDENT;
+<AFTER_EXPORT>{ // optional 'BRACED_CODE' to specify extra parameters
+  "intact" yy_pop_state(yyscanner); return INTACT;
+  {L}({L}|{D})* yy_pop_state(yyscanner); yylval->str = new string(yytext); return IDENT;
   "{" BEGIN IN_CODE; tmp_bracket.clear();
-  [ \t]+ {}
-  .|\n {}
+  [ \t\n] {}
   <<EOF>> yy_pop_state(yyscanner);
 }
 
-[>@%$] yy_push_state(EXPECT_ACTION, yyscanner); return yytext[0];
-<EXPECT_ACTION>{
+<EXPECT_CODE>{
+  {L}({L}|{D})* yylval->str = new string(yytext); return IDENT;
+  "{" BEGIN IN_CODE; tmp_bracket.clear();
+  [ \t\n] {}
+  <<EOF>> yy_pop_state(yyscanner);
+}
+
+[>@%$] yy_push_state(AFTER_ACTION_OP, yyscanner); return yytext[0];
+<AFTER_ACTION_OP>{
   {L}({L}|{D})* yy_pop_state(yyscanner); yylval->str = new string(yytext); return IDENT;
   "{" BEGIN IN_CODE; tmp_bracket.clear();
   [ \t\n]+ {}

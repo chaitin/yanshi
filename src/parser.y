@@ -129,6 +129,7 @@ define_stmt:
   | IDENT eq '\n' union_expr2 '\n' { $$ = new DefineStmt(*$1, $4); delete $1; $$->loc = yyloc; }
   | IDENT eq '\n' '|' union_expr2 '\n' { $$ = new DefineStmt(*$1, $5); delete $1; $$->loc = yyloc; }
   | EXPORT define_stmt { $$ = $2; ((DefineStmt*)$$)->export_ = true; $$->loc = yyloc; }
+  | EXPORT BRACED_CODE define_stmt { $$ = $3; ((DefineStmt*)$$)->export_ = true; ((DefineStmt*)$$)->export_params = *$2; delete $2; $$->loc = yyloc; }
   | INTACT define_stmt { $$ = $2; ((DefineStmt*)$$)->intact = true; $$->loc = yyloc; }
 
 union_expr:

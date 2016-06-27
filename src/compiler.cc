@@ -208,6 +208,7 @@ void compile_actions(DefineStmt* stmt)
         within.emplace_back(x, aa.second);
     }
     sort(ALL(within));
+    within.erase(unique(ALL(within)), within.end());
     return within;
   };
   decltype(anno.assoc) withins(anno.fsa.n());
@@ -235,9 +236,16 @@ void compile_actions(DefineStmt* stmt)
                    printf(S " %ld %ld-%ld %ld %s\n", u, from, to-1, v, t->define_module->defined_action[t->ident].c_str()); \
              }
 
-  if (output_header)
-    fprintf(output_header, "long yanshi_%s_transit(long u, long c);\n", stmt->lhs.c_str());
-  fprintf(output, "long yanshi_%s_transit(long u, long c)\n", stmt->lhs.c_str());
+  if (output_header) {
+    fprintf(output_header, "long yanshi_%s_transit(long u, long c", stmt->lhs.c_str());
+    if (stmt->export_params.size())
+      fprintf(output_header, ", %s", stmt->export_params.c_str());
+    fprintf(output_header, ");\n");
+  }
+  fprintf(output, "long yanshi_%s_transit(long u, long c", stmt->lhs.c_str());
+  if (stmt->export_params.size())
+    fprintf(output, ", %s", stmt->export_params.c_str());
+  fprintf(output, ")\n");
   fprintf(output, "{\n");
   indent(output, 1);
   fprintf(output, "long v = -1;\n");
@@ -367,10 +375,10 @@ void compile_export(DefineStmt* stmt)
             sorted_emplace(adj[i], epsilon, stmt2offset[v]+compiled[v].fsa.start);
           }
         long j = adj[i].size();
-        while (j && COLLAPSE_LABEL_BASE < adj[i][j-1].first.second) {
+        while (j && collapse_label_base < adj[i][j-1].first.second) {
           long v = adj[i][j-1].second;
-          if (adj[i][j-1].first.first < COLLAPSE_LABEL_BASE)
-            adj[i][j-1].first.second = COLLAPSE_LABEL_BASE;
+          if (adj[i][j-1].first.first < collapse_label_base)
+            adj[i][j-1].first.second = collapse_label_base;
           else
             j--;
           for (auto aa: assoc[v])
@@ -419,9 +427,9 @@ void compile_export(DefineStmt* stmt)
   DP(3, "Removing action labels");
   REP(i, anno.fsa.n()) {
     long j = anno.fsa.adj[i].size();
-    while (j && ACTION_LABEL_BASE < anno.fsa.adj[i][j-1].first.second)
-      if (anno.fsa.adj[i][j-1].first.first < ACTION_LABEL_BASE)
-        anno.fsa.adj[i][j-1].first.second = ACTION_LABEL_BASE;
+    while (j && action_label_base < anno.fsa.adj[i][j-1].first.second)
+      if (anno.fsa.adj[i][j-1].first.first < action_label_base)
+        anno.fsa.adj[i][j-1].first.second = action_label_base;
       else
         j--;
     anno.fsa.adj[i].resize(j);
