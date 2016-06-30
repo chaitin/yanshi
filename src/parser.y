@@ -205,10 +205,14 @@ factor:
   | '(' union_expr ')' { $$ = $2; }
   | '(' error ')' { $$ = new DotExpr; }
   | repeat { $$ = $1; }
-  | factor '>' action { $$ = $1; $$->entering.push_back($3); }
-  | factor '@' action { $$ = $1; $$->finishing.push_back($3); }
-  | factor '%' action { $$ = $1; $$->leaving.push_back($3); }
-  | factor '$' action { $$ = $1; $$->transiting.push_back($3); }
+  | factor '>' action { $$ = $1; $$->entering.emplace_back($3, 0L); }
+  | factor '>' INTEGER action { $$ = $1; $$->entering.emplace_back($4, $3); }
+  | factor '@' action { $$ = $1; $$->finishing.emplace_back($3, 0L); }
+  | factor '@' INTEGER action { $$ = $1; $$->finishing.emplace_back($4, $3); }
+  | factor '%' action { $$ = $1; $$->leaving.emplace_back($3, 0L); }
+  | factor '%' INTEGER action { $$ = $1; $$->leaving.emplace_back($4, $3); }
+  | factor '$' action { $$ = $1; $$->transiting.emplace_back($3, 0L); }
+  | factor '$' INTEGER action { $$ = $1; $$->transiting.emplace_back($4, $3); }
   | factor '+' { $$ = new PlusExpr($1); $$->loc = yyloc; }
   | factor '?' { $$ = new QuestionExpr($1); $$->loc = yyloc; }
   | factor '*' { $$ = new StarExpr($1); $$->loc = yyloc; }

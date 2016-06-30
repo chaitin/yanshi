@@ -9,6 +9,7 @@
 #include <typeinfo>
 #include <vector>
 using std::move;
+using std::pair;
 using std::string;
 using std::vector;
 
@@ -118,17 +119,17 @@ struct Expr : VisitableBase<Expr> {
   Location loc;
   long pre, post, depth; // set by Compiler
   vector<Expr*> anc; // set by Compiler
-  vector<Action*> entering, finishing, leaving, transiting;
+  vector<pair<Action*, long>> entering, finishing, leaving, transiting;
   DefineStmt* stmt = NULL; // set by ModuleImportDef
   virtual ~Expr() {
     for (auto a: entering)
-      delete a;
+      delete a.first;
     for (auto a: finishing)
-      delete a;
+      delete a.first;
     for (auto a: leaving)
-      delete a;
+      delete a.first;
     for (auto a: transiting)
-      delete a;
+      delete a.first;
   }
   string name() const {
     int status;
@@ -314,29 +315,41 @@ struct StmtPrinter : Visitor<Action>, Visitor<Expr>, Visitor<Stmt> {
     if (expr.entering.size()) {
       printf("%*s%s\n", 2*depth, "", "@entering");
       depth++;
-      for (auto a: expr.entering)
-        a->accept(*this);
+      for (auto a: expr.entering) {
+        indent(stdout, depth);
+        printf("%ld\n", a.second);
+        a.first->accept(*this);
+      }
       depth--;
     }
     if (expr.finishing.size()) {
       printf("%*s%s\n", 2*depth, "", "@finishing");
       depth++;
-      for (auto a: expr.finishing)
-        a->accept(*this);
+      for (auto a: expr.finishing) {
+        indent(stdout, depth);
+        printf("%ld\n", a.second);
+        a.first->accept(*this);
+      }
       depth--;
     }
     if (expr.leaving.size()) {
       printf("%*s%s\n", 2*depth, "", "@entering");
       depth++;
-      for (auto a: expr.leaving)
-        a->accept(*this);
+      for (auto a: expr.leaving) {
+        indent(stdout, depth);
+        printf("%ld\n", a.second);
+        a.first->accept(*this);
+      }
       depth--;
     }
     if (expr.transiting.size()) {
       printf("%*s%s\n", 2*depth, "", "@transiting");
       depth++;
-      for (auto a: expr.transiting)
-        a->accept(*this);
+      for (auto a: expr.transiting) {
+        indent(stdout, depth);
+        printf("%ld\n", a.second);
+        a.first->accept(*this);
+      }
       depth--;
     }
     expr.accept(*this);

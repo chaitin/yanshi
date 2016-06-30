@@ -93,14 +93,14 @@ struct ModuleUse : PrePostActionExprStmtVisitor {
   }
 
   void post_expr(Expr& expr) override {
-    for (Action* a: expr.entering)
-      PrePostActionExprStmtVisitor::visit(*a);
-    for (Action* a: expr.finishing)
-      PrePostActionExprStmtVisitor::visit(*a);
-    for (Action* a: expr.leaving)
-      PrePostActionExprStmtVisitor::visit(*a);
-    for (Action* a: expr.transiting)
-      PrePostActionExprStmtVisitor::visit(*a);
+    for (auto a: expr.entering)
+      PrePostActionExprStmtVisitor::visit(*a.first);
+    for (auto a: expr.finishing)
+      PrePostActionExprStmtVisitor::visit(*a.first);
+    for (auto a: expr.leaving)
+      PrePostActionExprStmtVisitor::visit(*a.first);
+    for (auto a: expr.transiting)
+      PrePostActionExprStmtVisitor::visit(*a.first);
   }
 
   void visit(RefAction& action) override {

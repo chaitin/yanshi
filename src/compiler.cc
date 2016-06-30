@@ -232,12 +232,12 @@ void compile_actions(DefineStmt* stmt)
   };
 
 #define D(S) if (opt_dump_action) { \
-               if (auto t = dynamic_cast<InlineAction*>(action)) \
+               if (auto t = dynamic_cast<InlineAction*>(action.first)) \
                  if (from == to-1) \
                    printf(S " %ld %ld %ld %s\n", u, from, v, t->code.c_str()); \
                  else \
                    printf(S " %ld %ld-%ld %ld %s\n", u, from, to-1, v, t->code.c_str()); \
-               else if (auto t = dynamic_cast<RefAction*>(action)) \
+               else if (auto t = dynamic_cast<RefAction*>(action.first)) \
                  if (from == to-1) \
                    printf(S " %ld %ld %ld %s\n", u, from, v, t->define_module->defined_action[t->ident].c_str()); \
                  else \
@@ -267,13 +267,12 @@ void compile_actions(DefineStmt* stmt)
     indent(output, 2);
     fprintf(output, "switch (c) {\n");
 
-    unordered_map<long, pair<vector<pair<long, long>>, set<Action*>>> v2case;
+    unordered_map<long, pair<vector<pair<long, long>>, vector<pair<Action*, long>>>> v2case;
     for (auto it = anno.fsa.adj[u].begin(); it != anno.fsa.adj[u].end(); ) {
       long from = it->first.first, to = it->first.second, v = it->second;
       while (++it != anno.fsa.adj[u].end() && to == it->first.first && it->second == v)
         to = it->first.second;
       v2case[v].first.emplace_back(from, to);
-      //stringstream& body = v2case[v].second;
       auto& body = v2case[v].second;
 
       auto ie = withins[u].end(), je = withins[v].end();
@@ -285,7 +284,7 @@ void compile_actions(DefineStmt* stmt)
         if (j == je || i->first != j->first)
           for (auto action: i->first->leaving) {
             D("%%");
-            body.insert(action);
+            body.push_back(action);
           }
       }
 
@@ -296,7 +295,7 @@ void compile_actions(DefineStmt* stmt)
         if (i == ie || i->first != j->first)
           for (auto action: j->first->entering) {
             D(">");
-            body.insert(action);
+            body.push_back(action);
           }
       }
 
@@ -307,7 +306,7 @@ void compile_actions(DefineStmt* stmt)
         if (i != ie && i->first == j->first)
           for (auto action: j->first->transiting) {
             D("$");
-            body.insert(action);
+            body.push_back(action);
           }
       }
 
@@ -318,7 +317,7 @@ void compile_actions(DefineStmt* stmt)
         if (i != ie && i->first == j->first && long(j->second) & long(ExprTag::final))
           for (auto action: j->first->finishing) {
             D("@");
-            body.insert(action);
+            body.push_back(action);
           }
       }
     }
@@ -333,10 +332,17 @@ void compile_actions(DefineStmt* stmt)
       }
       indent(output, 3);
       fprintf(output, "v = %ld;\n", x.first);
+      sort(ALL(x.second.second), [](const pair<Action*, long>& a0, const pair<Action*, long>& a1) {
+        return a0.second != a1.second ? a0.second < a1.second : a0.first < a1.first;
+      });
+      x.second.second.erase(unique(ALL(x.second.second)), x.second.second.end());
+        /*return a0.first == a1.first;
+      }), x.second.second.end());
+      x.second.second.erase(unique(ALL(x.second.second), [](const pair<Action*, long>& a0, const pair<Action*, long>& a1) {
+        return a0.first == a1.first;
+      }), x.second.second.end());*/
       for (auto a: x.second.second)
-        fprintf(output, "{%s}\n", get_code(a).c_str());
-        //body << "{" << get_code(action) << "}\n";
-      //fprintf(output, "v = %ld;\n%s", x.first, x.second.second.str().c_str());
+        fprintf(output, "{%s}\n", get_code(a.first).c_str());
       indent(output, 3);
       fprintf(output, "break;\n");
     }
@@ -521,21 +527,46 @@ void generate_cxx_export(DefineStmt* stmt)
   compile_export(stmt);
   FsaAnno& anno = compiled[stmt];
 
-  if (output_header)
-    fprintf(output_header, "void yanshi_%s_init(long& start, vector<long>& finals);\n", stmt->lhs.c_str());
-  fprintf(output, "void yanshi_%s_init(long& start, vector<long>& finals)\n", stmt->lhs.c_str());
+  if (opt_gen_c) {
+    if (output_header)
+      fprintf(output_header, "const long* yanshi_%s_init(long* start, long* finals_len);\n", stmt->lhs.c_str());
+    fprintf(output, "const long* yanshi_%s_init(long* start, long* finals_len)\n", stmt->lhs.c_str());
+  } else {
+    if (output_header)
+      fprintf(output_header, "void yanshi_%s_init(long& start, vector<long>& finals);\n", stmt->lhs.c_str());
+    fprintf(output, "void yanshi_%s_init(long& start, vector<long>& finals)\n", stmt->lhs.c_str());
+  }
+
   fprintf(output, "{\n");
   indent(output, 1);
+  if (opt_gen_c)
+    fprintf(output, "*");
   fprintf(output, "start = %ld;\n", anno.fsa.start);
-  indent(output, 1);
-  fprintf(output, "finals = {");
-  bool first = true;
-  for (long f: anno.fsa.finals) {
-    if (first) first = false;
-    else fprintf(output, ",");
-    fprintf(output, "%ld", f);
+  if (opt_gen_c) {
+    indent(output, 1);
+    fprintf(output, "static const long finals[] = {");
+    bool first = true;
+    for (long f: anno.fsa.finals) {
+      if (first) first = false;
+      else fprintf(output, ",");
+      fprintf(output, "%ld", f);
+    }
+    fprintf(output, "};\n");
+    indent(output, 1);
+    fprintf(output, "*finals_len = %zd;\n", anno.fsa.finals.size());
+    indent(output, 1);
+    fprintf(output, "return finals;\n");
+  } else {
+    indent(output, 1);
+    fprintf(output, "finals = {");
+    bool first = true;
+    for (long f: anno.fsa.finals) {
+      if (first) first = false;
+      else fprintf(output, ",");
+      fprintf(output, "%ld", f);
+    }
+    fprintf(output, "};\n");
   }
-  fprintf(output, "};\n");
   fprintf(output, "}\n\n");
 
   DP(3, "Compiling actions");
@@ -545,8 +576,12 @@ void generate_cxx_export(DefineStmt* stmt)
 void generate_cxx(Module* mo)
 {
   fprintf(output, "// Generated by 偃师, %s\n", mo->filename.c_str());
-  fprintf(output, "#include <vector>\n");
-  fprintf(output, "using std::vector;\n");
+  if (opt_gen_c)
+    fprintf(output, "#include <stdlib.h>\n");
+  else {
+    fprintf(output, "#include <vector>\n");
+    fprintf(output, "using std::vector;\n");
+  }
   if (opt_standalone) {
     fputs(
 "#include <algorithm>\n"
@@ -555,11 +590,13 @@ void generate_cxx(Module* mo)
 , output);
   }
   if (output_header) {
-    fputs(
-"#pragma once\n"
-"#include <vector>\n"
-"using std::vector;\n"
-, output_header);
+    fputs("#pragma once\n", output_header);
+    if (opt_gen_c)
+      fprintf(output, "#include <stdlib.h>\n");
+    else {
+      fprintf(output, "#include <vector>\n");
+      fprintf(output, "using std::vector;\n");
+    }
   }
   fprintf(output, "\n");
   for (Stmt* x = mo->toplevel; x; x = x->next)

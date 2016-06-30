@@ -20,6 +20,7 @@ void print_help(FILE *fh)
         "\n"
         "Options:\n"
         "  -b,--bytes                make labels range over [0,256), Unicode literals will be treated as UTF-8 bytes\n"
+        "  -C                        generate C source code (default: C++)\n"
         "  --check                   check syntax & use/def\n"
         "  --debug                   debug level\n"
         "  --debug-output            filename for debug output\n"
@@ -65,11 +66,14 @@ int main(int argc, char *argv[])
     {0,                     0,                 0,   0},
   };
 
-  while ((opt = getopt_long(argc, argv, "bDcd:GhI:l:O:o:Ss", long_options, NULL)) != -1) {
+  while ((opt = getopt_long(argc, argv, "bCDcd:GhI:l:O:o:Ss", long_options, NULL)) != -1) {
     switch (opt) {
     case 'b':
       opt_bytes = true;
       AB = 256;
+      break;
+    case 'C':
+      opt_gen_c = true;
       break;
     case 'D':
       break;

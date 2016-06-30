@@ -226,6 +226,7 @@ L			[a-zA-Z_\x80-\xff]
 
 [>@%$] yy_push_state(AFTER_ACTION_OP, yyscanner); return yytext[0];
 <AFTER_ACTION_OP>{
+  -?{D}+ yylval->integer = atol(yytext); return INTEGER;
   {L}({L}|{D})* yy_pop_state(yyscanner); yylval->str = new string(yytext); return IDENT;
   "{" BEGIN IN_CODE; tmp_bracket.clear();
   [ \t\n]+ {}
