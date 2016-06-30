@@ -208,7 +208,15 @@ void compile_actions(DefineStmt* stmt)
         within.emplace_back(x, aa.second);
     }
     sort(ALL(within));
-    within.erase(unique(ALL(within)), within.end());
+    auto j = within.begin();
+    for (auto i = within.begin(); i != within.end(); ) {
+      Expr* x = i->first;
+      long t = long(i->second);
+      while (++i != within.end() && x == i->first)
+        t |= long(i->second);
+      *j++ = {x, ExprTag(t)};
+    }
+    within.erase(j, within.end());
     return within;
   };
   decltype(anno.assoc) withins(anno.fsa.n());
@@ -259,13 +267,14 @@ void compile_actions(DefineStmt* stmt)
     indent(output, 2);
     fprintf(output, "switch (c) {\n");
 
-    unordered_map<long, pair<vector<pair<long, long>>, stringstream>> v2case;
+    unordered_map<long, pair<vector<pair<long, long>>, set<Action*>>> v2case;
     for (auto it = anno.fsa.adj[u].begin(); it != anno.fsa.adj[u].end(); ) {
       long from = it->first.first, to = it->first.second, v = it->second;
       while (++it != anno.fsa.adj[u].end() && to == it->first.first && it->second == v)
         to = it->first.second;
       v2case[v].first.emplace_back(from, to);
-      stringstream& body = v2case[v].second;
+      //stringstream& body = v2case[v].second;
+      auto& body = v2case[v].second;
 
       auto ie = withins[u].end(), je = withins[v].end();
 
@@ -276,7 +285,7 @@ void compile_actions(DefineStmt* stmt)
         if (j == je || i->first != j->first)
           for (auto action: i->first->leaving) {
             D("%%");
-            body << "{" << get_code(action) << "}\n";
+            body.insert(action);
           }
       }
 
@@ -287,7 +296,7 @@ void compile_actions(DefineStmt* stmt)
         if (i == ie || i->first != j->first)
           for (auto action: j->first->entering) {
             D(">");
-            body << "{" << get_code(action) << "}\n";
+            body.insert(action);
           }
       }
 
@@ -298,7 +307,7 @@ void compile_actions(DefineStmt* stmt)
         if (i != ie && i->first == j->first)
           for (auto action: j->first->transiting) {
             D("$");
-            body << "{" << get_code(action) << "}\n";
+            body.insert(action);
           }
       }
 
@@ -309,7 +318,7 @@ void compile_actions(DefineStmt* stmt)
         if (i != ie && i->first == j->first && long(j->second) & long(ExprTag::final))
           for (auto action: j->first->finishing) {
             D("@");
-            body << "{" << get_code(action) << "}\n";
+            body.insert(action);
           }
       }
     }
@@ -323,7 +332,11 @@ void compile_actions(DefineStmt* stmt)
           fprintf(output, "case %ld ... %ld:\n", y.first, y.second-1);
       }
       indent(output, 3);
-      fprintf(output, "v = %ld;\n%s", x.first, x.second.second.str().c_str());
+      fprintf(output, "v = %ld;\n", x.first);
+      for (auto a: x.second.second)
+        fprintf(output, "{%s}\n", get_code(a).c_str());
+        //body << "{" << get_code(action) << "}\n";
+      //fprintf(output, "v = %ld;\n%s", x.first, x.second.second.str().c_str());
       indent(output, 3);
       fprintf(output, "break;\n");
     }

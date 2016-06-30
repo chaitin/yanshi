@@ -112,11 +112,13 @@ void Fsa::accessible(function<void(long)> relate)
   id[start] = 1;
   REP(i, q.size()) {
     long u = q[i];
-    for (auto& e: adj[u])
+    for (auto& e: adj[u]) {
+      if (e.first.first >= AB) break;
       if (! id[e.second]) {
         id[e.second] = 1;
         q.push_back(e.second);
       }
+    }
   }
 
   long j = 0;
@@ -149,8 +151,10 @@ void Fsa::co_accessible(function<void(long)> relate)
 {
   vector<vector<long>> radj(n());
   REP(i, n())
-    for (auto& e: adj[i])
+    for (auto& e: adj[i]) {
+      if (e.first.first >= AB) break;
       radj[e.second].push_back(i);
+    }
   REP(i, n())
     sort(ALL(radj[i]));
   vector<long> q = finals, id(n(), 0);
