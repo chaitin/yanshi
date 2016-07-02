@@ -21,6 +21,13 @@ typedef uint16_t u16;
 typedef uint32_t u32;
 typedef uint64_t u64;
 
+#ifdef __APPLE__
+#include <crt_externs.h>
+extern char*** _NSGetArgv(void);
+#define program_invocation_name (((char **)*_NSGetArgv())[0])
+#define program_invocation_short_name (((char **)*_NSGetArgv())[0])
+#endif
+
 #define LEN_OF(x) (sizeof(x)/sizeof(*x))
 #define ALL(x) (x).begin(), (x).end()
 #define REP(i, n) FOR(i, 0, n)

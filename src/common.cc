@@ -89,7 +89,7 @@ void err_exit(int exitno, const char *format, ...)
   int nptrs = backtrace(bt, LEN_OF(buf));
   int i = sprintf(buf, "addr2line -Cfipe %s", program_invocation_name), j = 0;
   while (j < nptrs && i+30 < sizeof buf)
-    i += sprintf(buf+i, " %#x", bt[j++]);
+    i += sprintf(buf+i, " %p", bt[j++]);
   strcat(buf, ">&2");
   fputs("\n", stderr);
   system(buf);
