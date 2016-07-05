@@ -558,23 +558,6 @@ void generate_cxx_export(DefineStmt* stmt)
   fprintf(output, "};\n");
   fprintf(output, "  return 0 <= u && u < %ld && finals[u/(CHAR_BIT*sizeof(long))] >> (u%%(CHAR_BIT*sizeof(long))) & 1;\n", anno.fsa.n());
   fprintf(output, "};\n\n");
-  /*
-  indent(output, 1);
-  if (opt_gen_c)
-    fputs(
-"  long l = 0, h = len;\n"
-"  while (l < h) {\n"
-"    long x = l+h >> 1;\n"
-"    if (finals[x] < state) l = x+1;\n"
-"    else h = x;\n"
-"  }\n"
-"  return l < len && finals[l] == state;\n"
-, output);
-  else {
-    indent(output, 1);
-    fprintf(output, "return std::binary_search(finals, finals+len, state);\n");
-  }
-*/
 
   DP(3, "Compiling actions");
   compile_actions(stmt);
@@ -591,12 +574,19 @@ void generate_cxx(Module* mo)
     fprintf(output, "#include <algorithm>\n");
     fprintf(output, "#include <limits.h>\n");
     fprintf(output, "#include <vector>\n");
-    fprintf(output, "using std::vector;\n");
+    fprintf(output, "using namespace std;\n");
   }
   if (opt_standalone) {
     fputs(
 "#include <algorithm>\n"
-"#include <cstdio>\n"
+"#include <codecvt>\n"
+"#include <locale.h>\n"
+"#include <locale>\n"
+"#include <stdint.h>\n"
+"#include <stdio.h>\n"
+"#include <string.h>\n"
+"#include <string>\n"
+"#include <wctype.h>\n"
 "using namespace std;\n"
 , output);
   }
@@ -623,22 +613,29 @@ void generate_cxx(Module* mo)
 "\n"
 "int main(int argc, char* argv[])\n"
 "{\n"
-"  long u = yanshi_main_start, len = 0;\n"
-"  if (argc > 1)\n"
-"    for (char* c = argv[1]; *c; c++) {\n"
-"      u = yanshi_main_transit(u, *(unsigned char*)c);\n"
-"      if (u < 0) break;\n"
-"      len++;\n"
-"    }\n"
+"  setlocale(LC_ALL, \"\");\n"
+"  string utf8;\n"
+"  const char* p;\n"
+"  long c, u = yanshi_main_start, pref = 0;\n"
+"  if (argc == 2)\n"
+"    utf8 = argv[1];\n"
 "  else {\n"
-"    int c;\n"
-"    while (u >= 0 && (c = getchar()) != EOF) {\n"
-"      u = yanshi_main_transit(u, c);\n"
-"      if (u < 0) break;\n"
-"      len++;\n"
-"    }\n"
+"    FILE* f = argc == 1 ? stdin : fopen(argv[1], \"r\");\n"
+"    while ((c = fgetc(f)) != EOF)\n"
+"      utf8 += c;\n"
+"    fclose(f);\n"
 "  }\n"
-"  printf(\"len: %ld\\nstate: %ld\\nfinal: %s\\n\", len, u, binary_search(finals.begin(), finals.end(), u) ? \"true\" : \"false\");\n"
+"  u32string utf32 = wstring_convert<codecvt_utf8<char32_t>, char32_t>{}.from_bytes(utf8);\n"
+"  printf(\"\\033[%s33m%ld \\033[m\", yanshi_main_is_final(u) ? \"1;\" : \"\", u);\n"
+"  for (char32_t c: utf32) {\n"
+"    u = yanshi_main_transit(u, c);\n"
+"    if (iswcntrl(c)) printf(\"%d \", c);\n"
+"    else printf(\"%lc \", c);\n"
+"    printf(\"\\033[%s33m%ld \\033[m\", yanshi_main_is_final(u) ? \"1;\" : \"\", u);\n"
+"    if (u < 0) break;\n"
+"    pref++;\n"
+"  }\n"
+"  printf(\"\\nlen: %zd\\npref: %ld\\nstate: %ld\\nfinal: %s\\n\", utf32.size(), pref, u, yanshi_main_is_final(u) ? \"true\" : \"false\");\n"
 "}\n"
 , output);
   }
