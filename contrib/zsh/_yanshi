@@ -2,9 +2,9 @@
 
 _arguments \
   '(-b --bytes)'{-b,--bytes}'[make labels range over \[0,256), Unicode literals will be treated as UTF-8 bytes]' \
-  '(-c --check)'{-c,--check}'=[check syntax & use/def]' \
+  '(-c --check)'{-c,--check}'[check syntax & use/def]' \
   '-C[generate C source code (default: C++)]' \
-  '(-d --debug)'{-d,--debug}'=[debug level]:level:(0 1 2 3 4 5)' \
+  '(-d --debug)'{-d,--debug}'+[debug level]:level:(0 1 2 3 4 5)' \
   '--dump-action[dump associated actions for each edge]' \
   '--dump-assoc[dump associated AST Expr for each state]' \
   '--dump-automaton[dump automata]' \
@@ -13,10 +13,10 @@ _arguments \
   '--dump-tree[dump AST]' \
   '(-G --graph)'{-G,--graph}'[output a Graphviz dot file]' \
   '(-I --import)'{-I,--import}'=[add <dir> to search path for "import"]' \
-  '(-i --interactive)'{-i,--interactive}'=[interactive mode]' \
+  '(-i --interactive)'{-i,--interactive}'[interactive mode]' \
   '(-l --debug-output)'{-l,--debug-output}'[filename for debug output]:file:_files' \
-  '(-o --output)'{-o,--output}'[.cc output filename]:file:_files' \
+  '(-o --output)'{-o,--output}'=[.cc output filename]:file:_files' \
   '(-O --output-header)'{-O,--output-header}'[.hh output filename]:file:_files' \
-  '(-s --substring-grammar)'{-s,--substring-grammar}'=[construct regular approximation of the substring grammar. Inner states of nonterminals labeled 'intact' are not connected to start/final]' \
-  '(-h --help)'{-h,--help}'=[display this help]' \
+  '(-s --substring-grammar)'{-s,--substring-grammar}'[construct regular approximation of the substring grammar. Inner states of nonterminals labeled 'intact' are not connected to start/final]' \
+  '(-h --help)'{-h,--help}'[display this help]' \
   '1:file:_files -g "*.{ys,yanshi}"'\

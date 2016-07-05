@@ -1,4 +1,4 @@
 #pragma once
-#include "fsa_anno.hh"
+#include "syntax.hh"
 
-void repl(const FsaAnno& anno);
+void repl(DefineStmt* stmt);

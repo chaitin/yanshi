@@ -420,11 +420,11 @@ void FsaAnno::substring_grammar() {
     bool ok = true;
     for (auto aa: assoc[i])
       if (auto e = dynamic_cast<CollapseExpr*>(aa.first)) {
-        if (e->define_stmt->intact && long(aa.second) & long(ExprTag::inner)) {
+        if (e->define_stmt->intact && has_inner(aa.second)) {
           ok = false;
           break;
         }
-      } else if (aa.first->stmt->intact && long(aa.second) & long(ExprTag::inner)) {
+      } else if (aa.first->stmt->intact && has_inner(aa.second)) {
         ok = false;
         break;
       }

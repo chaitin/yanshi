@@ -14,7 +14,7 @@ using namespace std;
 
 map<DefineStmt*, FsaAnno> compiled;
 
-static void print_assoc(const FsaAnno& anno)
+void print_assoc(const FsaAnno& anno)
 {
   magenta(); printf("=== Associated Expr of each state\n"); sgr0();
   REP(i, anno.fsa.n()) {
@@ -22,9 +22,9 @@ static void print_assoc(const FsaAnno& anno)
     for (auto aa: anno.assoc[i]) {
       auto a = aa.first;
       printf(" %s%s%s%s(%ld-%ld", a->name().c_str(),
-             long(aa.second) & long(ExprTag::start) ? "^" : "",
-             long(aa.second) & long(ExprTag::inner) ? "." : "",
-             long(aa.second) & long(ExprTag::final) ? "$" : "",
+             has_start(aa.second) ? "^" : "",
+             has_inner(aa.second) ? "." : "",
+             has_final(aa.second) ? "$" : "",
              a->loc.start, a->loc.end);
       if (a->entering.size())
         printf(",>%zd", a->entering.size());
@@ -41,7 +41,7 @@ static void print_assoc(const FsaAnno& anno)
   puts("");
 }
 
-static void print_automaton(const Fsa& fsa)
+void print_automaton(const Fsa& fsa)
 {
   magenta(); printf("=== Automaton\n"); sgr0();
   green(); printf("start: %ld\n", fsa.start);
@@ -314,7 +314,7 @@ void compile_actions(DefineStmt* stmt)
       for (auto i = withins[u].begin(), j = withins[v].begin(); j != je; ++j) {
         while (i != ie && i->first < j->first)
           ++i;
-        if (i != ie && i->first == j->first && long(j->second) & long(ExprTag::final))
+        if (i != ie && i->first == j->first && has_final(j->second))
           for (auto action: j->first->finishing) {
             D("@");
             body.push_back(action);
@@ -375,19 +375,20 @@ void compile_export(DefineStmt* stmt)
       return;
     DP(4, "Allocate %ld to %s", allo, stmt->lhs.c_str());
     FsaAnno& anno = compiled[stmt];
-    long old = stmt2offset[stmt] = allo;
-    allo += anno.fsa.n()+1;
+    long base = stmt2offset[stmt] = allo;
+    allo += anno.fsa.n();
     adj.insert(adj.end(), ALL(anno.fsa.adj));
     REP(i, anno.fsa.n())
-      for (auto& e: adj[old+i])
-        e.second += old;
-    adj.emplace_back(); // appeared in other automata, this is a vertex corresponding to the completion of 'stmt'
+      for (auto& e: adj[base+i])
+        e.second += base;
+    //adj.emplace_back(); // appeared in other automata, this is a vertex corresponding to the completion of 'stmt'
     assoc.insert(assoc.end(), ALL(anno.assoc));
-    assoc.emplace_back();
-    FOR(i, old, old+anno.fsa.n())
-      if (anno.fsa.has_special(i-old)) {
+    //assoc.emplace_back();
+    CollapseExpr* e;
+    FOR(i, base, base+anno.fsa.n())
+      if (anno.fsa.has_collapse(i-base)) {
         for (auto aa: assoc[i])
-          if (auto e = dynamic_cast<CollapseExpr*>(aa.first)) {
+          if (has_start(aa.second) && (e = dynamic_cast<CollapseExpr*>(aa.first))) {
             DefineStmt* v = e->define_stmt;
             allocate_collapse(v);
             // (i@{CollapseExpr,...}, special, _) -> ({CollapseExpr,...}, epsilon, CollapseExpr.define_stmt.start)
@@ -401,7 +402,7 @@ void compile_export(DefineStmt* stmt)
           else
             j--;
           for (auto aa: assoc[v])
-            if (auto e = dynamic_cast<CollapseExpr*>(aa.first)) {
+            if (has_final(aa.second) && (e = dynamic_cast<CollapseExpr*>(aa.first))) {
               DefineStmt* w = e->define_stmt;
               allocate_collapse(w);
               // (_, special, v@{CollapseExpr,...}) -> (CollapseExpr.define_stmt.final, epsilon, v)

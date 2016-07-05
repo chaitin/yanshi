@@ -488,8 +488,9 @@ long load(const string& filename)
     if (! main_export)
       puts("no exporting DefineStmt");
     else {
+      printf("Testing %s\n", main_export->lhs.c_str());
       compile_export(main_export);
-      repl(compiled[main_export]);
+      repl(main_export);
     }
   }
 

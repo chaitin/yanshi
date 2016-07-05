@@ -152,6 +152,7 @@ void log_status(const char *format, ...)
   va_end(ap);
 }
 
+void bold(long fd) { if (isatty(fd)) fputs("\x1b[1m", fd == STDOUT_FILENO ? stdout : stderr); }
 void blue(long fd) { if (isatty(fd)) fputs(BLUE, fd == STDOUT_FILENO ? stdout : stderr); }
 void cyan(long fd) { if (isatty(fd)) fputs(CYAN, fd == STDOUT_FILENO ? stdout : stderr); }
 void green(long fd) { if (isatty(fd)) fputs(GREEN, fd == STDOUT_FILENO ? stdout : stderr); }

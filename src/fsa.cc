@@ -44,9 +44,10 @@ bool Fsa::has(long u, long c) const
   return it != adj[u].begin() && c < (--it)->first.second;
 }
 
-bool Fsa::has_special(long u) const
+bool Fsa::has_collapse(long u) const
 {
-  return lower_bound(ALL(adj[u]), make_pair(make_pair(AB, LONG_MIN), LONG_MIN)) != adj[u].end();
+  auto it = lower_bound(ALL(adj[u]), make_pair(make_pair(collapse_label_base, LONG_MIN), LONG_MIN));
+  return it != adj[u].end() && it->first.first < collapse_label;
 }
 
 long Fsa::transit(long u, long c) const

@@ -46,6 +46,7 @@ extern char*** _NSGetArgv(void);
 const long MAX_CODEPOINT = 0x10ffff;
 extern long action_label_base, action_label, collapse_label_base, collapse_label;
 
+void bold(long fd = 1);
 void blue(long fd = 1);
 void cyan(long fd = 1);
 void green(long fd = 1);

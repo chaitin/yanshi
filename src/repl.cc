@@ -1,3 +1,4 @@
+#include "compiler.hh"
 #include "fsa_anno.hh"
 #include "loader.hh"
 #include "syntax.hh"
@@ -16,15 +17,28 @@
 using namespace std;
 
 enum class ReplMode {string, integer};
-ReplMode mode = ReplMode::string;
+static ReplMode mode = ReplMode::string;
+static const FsaAnno* anno;
 
 struct Command
 {
   const char* name;
   function<void()> fn;
 } commands[] = {
-  {".string", []() {mode = ReplMode::string; puts("Input a string"); }},
+  {".automaton", []() {print_automaton(anno->fsa); }},
+  {".assoc", []() {print_assoc(*anno); }},
+  {".help",
+    []() {
+      fputs("Commands available from the prompt:\n"
+             "  :automaton    dump automaton\n"
+             "  :assoc        dump associated AST Expr for each state\n"
+             "  :help         display this help\n"
+             "  :integer      input is a list of non-negative integers\n"
+             "  :string       input is a string (default)\n"
+             , stdout);
+    }},
   {".integer", []() {mode = ReplMode::integer; puts("Input a list of non-negative integers"); }},
+  {".string", []() {mode = ReplMode::string; puts("Input a string"); }},
 };
 
 #ifdef HAVE_READLINE
@@ -65,11 +79,12 @@ char* readline(const char* prompt)
 }
 #endif
 
-void repl(const FsaAnno& anno)
+void repl(DefineStmt* stmt)
 {
 #ifdef HAVE_READLINE
   rl_attempted_completion_function = on_complete;
 #endif
+  anno = &compiled[stmt];
   char* line;
   stringstream ss;
   while ((line = readline("λ ")) != NULL) {
@@ -97,9 +112,9 @@ void repl(const FsaAnno& anno)
       continue;
     }
 
-    long u = anno.fsa.start;
+    long u = anno->fsa.start;
     int32_t i = 0, len, c;
-    if (anno.fsa.is_final(u)) yellow(1);
+    if (anno->fsa.is_final(u)) yellow(1);
     else normal_yellow(1);
     printf("%ld ", u); sgr0();
 
@@ -109,8 +124,8 @@ void repl(const FsaAnno& anno)
         U8_NEXT_OR_FFFD(line, i, len, c);
         if (iswcntrl(c)) printf("%d ", c);
         else printf("%lc ", c);
-        u = anno.fsa.transit(u, c);
-        if (anno.fsa.is_final(u)) yellow();
+        u = anno->fsa.transit(u, c);
+        if (anno->fsa.is_final(u)) yellow();
         else normal_yellow();
         printf("%ld ", u); sgr0();
         if (u < 0) break;
@@ -120,8 +135,8 @@ void repl(const FsaAnno& anno)
       ss.str(line);
       while (ss >> c) {
         printf("%d ", c);
-        u = anno.fsa.transit(u, c);
-        if (anno.fsa.is_final(u)) yellow();
+        u = anno->fsa.transit(u, c);
+        if (anno->fsa.is_final(u)) yellow();
         else normal_yellow();
         printf("%ld ", u); sgr0();
         if (u < 0) break;
@@ -130,17 +145,24 @@ void repl(const FsaAnno& anno)
     free(line);
     puts("");
     if (u >= 0) {
-      unordered_map<DefineStmt*, vector<long>> poss;
-      for (auto aa: anno.assoc[u]) {
+      unordered_map<DefineStmt*, vector<long>> start_finals;
+      unordered_map<DefineStmt*, vector<pair<long, long>>> inners;
+      for (auto aa: anno->assoc[u]) {
         if (has_start(aa.second))
-          poss[aa.first->stmt].push_back(aa.first->loc.start);
+          start_finals[aa.first->stmt].push_back(aa.first->loc.start);
+        if (has_inner(aa.second)) {
+          inners[aa.first->stmt].emplace_back(aa.first->loc.start, 1);
+          inners[aa.first->stmt].emplace_back(aa.first->loc.end, -1);
+        }
         if (has_final(aa.second))
-          poss[aa.first->stmt].push_back(aa.first->loc.end);
+          start_finals[aa.first->stmt].push_back(aa.first->loc.end);
       }
       vector<DefineStmt*> stmts;
-      for (auto& it: poss)
+      for (auto& it: start_finals)
         stmts.push_back(it.first);
-      // sort by location
+      for (auto& it: inners)
+        stmts.push_back(it.first);
+      // sort DefineStmt by location
       sort(ALL(stmts), [](const DefineStmt* x, const DefineStmt* y) {
         if (x->module != y->module)
           return x->module < y->module;
@@ -148,18 +170,29 @@ void repl(const FsaAnno& anno)
           return x->loc.start < y->loc.start;
         return x->loc.end < y->loc.end;
       });
+      stmts.erase(unique(ALL(stmts)), stmts.end());
       for (auto* stmt: stmts) {
-        vector<long>& pos = poss[stmt];
-        sort(ALL(pos));
-        auto cursor = pos.begin();
+        auto& start_final = start_finals[stmt];
+        auto& inner = inners[stmt];
+        sort(ALL(start_final));
+        sort(ALL(inner));
+        auto it0 = start_final.begin();
+        auto it1 = inner.begin();
+        long nest = 0;
         FOR(i, stmt->loc.start, stmt->loc.end) {
-          for (; cursor != pos.end() && *cursor < i; ++cursor);
-          if (cursor != pos.end() && *cursor == i) {
+          for (; it0 != start_final.end() && *it0 < i; ++it0);
+          if (it0 != start_final.end() && *it0 == i) {
             cyan();
             putchar(':');
             sgr0();
           }
+          for (; it1 != inner.end() && it1->first <= i; ++it1)
+            nest += it1->second;
+          if (nest)
+            yellow();
           putchar(stmt->module->locfile.data[i]);
+          if (nest)
+            sgr0();
         }
       }
     }

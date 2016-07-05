@@ -9,6 +9,7 @@ enum class ExprTag {
 };
 
 extern inline bool has_start(ExprTag x) { return long(x) & long(ExprTag::start); }
+extern inline bool has_inner(ExprTag x) { return long(x) & long(ExprTag::inner); }
 extern inline bool has_final(ExprTag x) { return long(x) & long(ExprTag::final); }
 
 bool operator<(ExprTag x, ExprTag y);
