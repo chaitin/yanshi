@@ -7,11 +7,14 @@ let s:save_cpo = &cpo
 set cpo&vim
 
 fu! SyntaxCheckers_yanshi_yanshi_GetLocList() dict
-  let makeprg = self.makeprgBuild({ 'args': '-c' })
+  let makeprg = self.makeprgBuild({ 'args': '-d0 -c' })
 
   let errorformat =
-        \ '%C  %.%#,'   .
-        \ '%E%f %l%*[^:]:%c%*[-0-9] %m'
+        \ '%C  %.%#,'.
+        \ '%E%f %l:%c-%*\d error %m,'.
+        \ '%E%f %l-%*\d:%c-%*\d error %m,'.
+        \ '%W%f %l:%c-%*\d warning %m,'.
+        \ '%W%f %l-%*\d:%c-%*\d warning %m'
 
   return SyntasticMake({
         \ 'makeprg': makeprg,

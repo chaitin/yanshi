@@ -19,6 +19,7 @@ using namespace std;
 
 static map<pair<dev_t, ino_t>, Module> inode2module;
 static unordered_map<DefineStmt*, vector<DefineStmt*>> depended_by; // key ranges over all DefineStmt
+static unordered_map<DefineStmt*, vector<Expr*>> used_as_collapse, used_as_embed;
 map<string, long> macro;
 FILE *output, *output_header;
 
@@ -154,8 +155,10 @@ struct ModuleUse : PrePostActionExprStmtVisitor {
         if (it == mo.qualified_import[expr.qualified]->defined.end()) {
           n_errors++;
           mo.locfile.error(expr.loc, "'%s::%s' undefined", expr.qualified.c_str(), expr.ident.c_str());
-        } else
+        } else {
+          used_as_collapse[it->second].push_back(&expr);
           expr.define_stmt = it->second;
+        }
       }
     } else {
       auto it = mo.defined.find(expr.ident);
@@ -175,8 +178,10 @@ struct ModuleUse : PrePostActionExprStmtVisitor {
       if (! found) {
         n_errors++;
         mo.locfile.error(expr.loc, "'%s' undefined", expr.ident.c_str());
-      } else
+      } else {
+        used_as_collapse[it->second].push_back(&expr);
         expr.define_stmt = it->second;
+      }
     }
   }
   void visit(DefineStmt& stmt) override {
@@ -197,6 +202,7 @@ struct ModuleUse : PrePostActionExprStmtVisitor {
           mo.locfile.error(expr.loc, "'%s::%s' undefined", expr.qualified.c_str(), expr.ident.c_str());
         } else {
           depended_by[it->second].push_back(stmt);
+          used_as_embed[it->second].push_back(&expr);
           expr.define_stmt = it->second;
         }
       }
@@ -225,6 +231,7 @@ struct ModuleUse : PrePostActionExprStmtVisitor {
         mo.locfile.error(expr.loc, "'%s' undefined", expr.ident.c_str());
       } else {
         depended_by[it->second].push_back(stmt);
+        used_as_embed[it->second].push_back(&expr);
         expr.define_stmt = it->second;
       }
     }
@@ -382,6 +389,24 @@ long load(const string& filename)
     }
   if (n_errors)
     return n_errors;
+
+  // warning: used as both CollapseExpr and EmbedExpr
+  for (auto& it: used_as_collapse)
+    if (used_as_embed.count(it.first)) {
+      it.first->module->locfile.warning(it.first->loc, "'%s' used as both CollapseExpr and EmbedExpr", it.first->lhs.c_str());
+      auto& xs = it.second;
+      auto& ys = used_as_embed[it.first];
+      if (xs.size() <= ys.size() || xs.size() <= 3)
+        for (auto* x: xs) {
+          fputs("  ", stderr);
+          x->stmt->module->locfile.warning_context(x->loc, "required by %s", x->stmt->lhs.c_str());
+        }
+      if (xs.size() > ys.size() || ys.size() <= 3)
+        for (auto* y: ys) {
+          fputs("  ", stderr);
+          y->stmt->module->locfile.warning_context(y->loc, "required by %s", y->stmt->lhs.c_str());
+        }
+    }
 
   if (opt_dump_module) {
     magenta(); printf("=== Module\n"); sgr0();

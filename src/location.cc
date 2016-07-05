@@ -62,10 +62,8 @@ void LocationFile::locate(const Location& loc, long& line1, long& col1, long& li
   col2 = loc.end - linemap[line2];
 }
 
-void LocationFile::error(const Location& loc, const char* fmt, ...) const
+void LocationFile::report_location(const Location& loc) const
 {
-  va_list va;
-  va_start(va, fmt);
   long line1, col1, line2, col2;
   locate(loc, line1, col1, line2, col2);
   yellow();
@@ -75,9 +73,30 @@ void LocationFile::error(const Location& loc, const char* fmt, ...) const
     fprintf(stderr, "%ld:%ld-%ld ", line1+1, col1+1, col2);
   else
     fprintf(stderr, "%ld-%ld:%ld-%ld ", line1+1, line2+1, col1+1, col2);
+}
+
+void LocationFile::error(const Location& loc, const char* fmt, ...) const
+{
+  report_location(loc);
   red();
+  fprintf(stderr, "error ");
+  va_list va;
+  va_start(va, fmt);
   vfprintf(stderr, fmt, va);
+  va_end(va);
   fputs("\n", stderr);
   sgr0();
+}
+
+void LocationFile::warning(const Location& loc, const char* fmt, ...) const
+{
+  report_location(loc);
+  yellow();
+  fprintf(stderr, "warning ");
+  va_list va;
+  va_start(va, fmt);
+  vfprintf(stderr, fmt, va);
   va_end(va);
+  fputs("\n", stderr);
+  sgr0();
 }
