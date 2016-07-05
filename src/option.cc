@@ -9,5 +9,5 @@ long debug_level = 3;
 FILE* debug_file;
 const char* opt_output_filename = "-";
 const char* opt_output_header_filename;
-const char* opt_mode = "c++";
+Mode opt_mode = Mode::cxx;
 vector<string> opt_include_paths;

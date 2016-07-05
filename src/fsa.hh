@@ -19,8 +19,9 @@ struct Fsa {
   void check() const;
   long n() const { return adj.size(); }
   bool is_final(long x) const;
-  bool has(long u, long a) const;
+  bool has(long u, long c) const;
   bool has_special(long u) const;
+  long transit(long u, long c) const;
   void epsilon_closure(vector<long>& src) const;
   Fsa operator~() const;
   // a -> a

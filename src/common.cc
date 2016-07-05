@@ -86,7 +86,7 @@ void err_exit(int exitno, const char *format, ...)
 
   void *bt[99];
   char buf[1024];
-  int nptrs = backtrace(bt, LEN_OF(buf));
+  int nptrs = backtrace(bt, LEN(buf));
   int i = sprintf(buf, "addr2line -Cfipe %s", program_invocation_name), j = 0;
   while (j < nptrs && i+30 < sizeof buf)
     i += sprintf(buf+i, " %p", bt[j++]);
@@ -152,13 +152,14 @@ void log_status(const char *format, ...)
   va_end(ap);
 }
 
-void blue() { if (isatty(2)) fputs(BLUE, stderr); }
-void cyan() { if (isatty(2)) fputs(CYAN, stderr); }
-void green() { if (isatty(2)) fputs(GREEN, stderr); }
-void magenta() { if (isatty(2)) fputs(MAGENTA, stderr); }
-void red() { if (isatty(2)) fputs(RED, stderr); }
-void sgr0() { if (isatty(2)) fputs(SGR0, stderr); }
-void yellow() { if (isatty(2)) fputs(YELLOW, stderr); }
+void blue(long fd) { if (isatty(fd)) fputs(BLUE, fd == STDOUT_FILENO ? stdout : stderr); }
+void cyan(long fd) { if (isatty(fd)) fputs(CYAN, fd == STDOUT_FILENO ? stdout : stderr); }
+void green(long fd) { if (isatty(fd)) fputs(GREEN, fd == STDOUT_FILENO ? stdout : stderr); }
+void magenta(long fd) { if (isatty(fd)) fputs(MAGENTA, fd == STDOUT_FILENO ? stdout : stderr); }
+void red(long fd) { if (isatty(fd)) fputs(RED, fd == STDOUT_FILENO ? stdout : stderr); }
+void sgr0(long fd) { if (isatty(fd)) fputs(SGR0, fd == STDOUT_FILENO ? stdout : stderr); }
+void yellow(long fd) { if (isatty(fd)) fputs(YELLOW, fd == STDOUT_FILENO ? stdout : stderr); }
+void normal_yellow(long fd) { if (isatty(fd)) fputs(NORMAL_YELLOW, fd == STDOUT_FILENO ? stdout : stderr); }
 
 void indent(FILE* f, int d)
 {

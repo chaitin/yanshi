@@ -4,10 +4,10 @@
 #include "parser.hh"
 #include "syntax.hh"
 
-#include <climits>
-#include <cstdlib>
-#include <cstring>
+#include <limits.h>
+#include <stdlib.h>
 #include <string>
+#include <string.h>
 #include <unicode/utf8.h>
 using namespace std;
 
@@ -18,10 +18,8 @@ using namespace std;
     yyset_extra(yylloc->end, yyscanner);    \
   } while (0);
 
-static int my_top_state(yyscan_t yyscanner);
-
 static string tmp_bracket, tmp_str;
-
+static long tmp_str_pos;
 static bool semicolon;
 
 static long invalid_escape(YYSTYPE* yylval, const char* text)
@@ -123,7 +121,7 @@ L			[a-zA-Z_\x80-\xff]
 "#" yy_push_state(IN_LINE_COMMENT, yyscanner);
 "//" yy_push_state(IN_LINE_COMMENT, yyscanner);
 <IN_LINE_COMMENT>{
-  "\n" yy_pop_state(yyscanner); unput('\n');
+  "\n" yy_pop_state(yyscanner); unput('\n'); yyset_extra(yylloc->end-1, yyscanner);
   <<EOF>> yy_pop_state(yyscanner);
   . {}
 }
@@ -249,13 +247,14 @@ L			[a-zA-Z_\x80-\xff]
   <<EOF>> yy_pop_state(yyscanner); unexpected_eof(yylval, "}");
 }
 
-' tmp_str.clear(); yy_push_state(IN_Q_STRING, yyscanner);
-"\"" tmp_str.clear(); yy_push_state(IN_QQ_STRING, yyscanner);
+' tmp_str.clear(); tmp_str_pos = yylloc->start; yy_push_state(IN_Q_STRING, yyscanner);
+"\"" tmp_str.clear(); tmp_str_pos = yylloc->start; yy_push_state(IN_QQ_STRING, yyscanner);
 <IN_Q_STRING>{
   ' {
     yy_pop_state(yyscanner);
     if (YY_START == INITIAL || YY_START == IN_PAREN) {
       yylval->str = new string(tmp_str);
+      yylloc->start = tmp_str_pos;
       return STRING_LITERAL;
     }
     tmp_bracket += yytext;
@@ -267,6 +266,7 @@ L			[a-zA-Z_\x80-\xff]
     yy_pop_state(yyscanner);
     if (YY_START == INITIAL || YY_START == IN_PAREN) {
       yylval->str = new string(tmp_str);
+      yylloc->start = tmp_str_pos;
       return STRING_LITERAL;
     }
     tmp_bracket += yytext;

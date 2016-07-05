@@ -39,7 +39,8 @@ void FsaAnno::add_assoc(Expr& expr)
   // has actions: actions need tags to differentiate 'entering', 'leaving', ...
   // 'intact': states with the 'inner' tag cannot be connected to start/final in substring grammar
   // 'CollapseExpr': differentiate states representing 'CollapseExpr' (u, special, v)
-  if (expr.no_action() && ! expr.stmt->intact && ! dynamic_cast<CollapseExpr*>(&expr))
+  // 'opt_mode': displaying possible positions for given strings in interactive mode
+  if (expr.no_action() && ! expr.stmt->intact && ! dynamic_cast<CollapseExpr*>(&expr) && opt_mode != Mode::interactive)
     return;
   auto j = fsa.finals.begin();
   REP(i, fsa.n()) {

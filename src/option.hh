@@ -8,5 +8,6 @@ extern bool opt_bytes, opt_check, opt_dump_action, opt_dump_assoc, opt_dump_auto
 extern long AB;
 extern const char* opt_output_filename;
 extern const char* opt_output_header_filename;
-extern const char* opt_mode;
+enum class Mode {cxx, graphviz, interactive};
+extern Mode opt_mode;
 extern vector<string> opt_include_paths;

@@ -3,6 +3,7 @@
 #include "loader.hh"
 #include "option.hh"
 #include "parser.hh"
+#include "repl.hh"
 
 #include <algorithm>
 #include <errno.h>
@@ -20,6 +21,8 @@ using namespace std;
 static map<pair<dev_t, ino_t>, Module> inode2module;
 static unordered_map<DefineStmt*, vector<DefineStmt*>> depended_by; // key ranges over all DefineStmt
 static unordered_map<DefineStmt*, vector<Expr*>> used_as_collapse, used_as_embed;
+static Module* main_module;
+static DefineStmt* main_export;
 map<string, long> macro;
 FILE *output, *output_header;
 
@@ -48,7 +51,7 @@ struct ModuleImportDef : PreorderStmtVisitor {
   void visit(ActionStmt& stmt) override {
     if (mo.defined_action.count(stmt.ident)) {
       n_errors++;
-      mo.locfile.error(stmt.loc, "Redefined '%s'", stmt.ident.c_str());
+      mo.locfile.error(stmt.loc, "redefined '%s'", stmt.ident.c_str());
     }
     mo.defined_action[stmt.ident] = stmt.code;
   }
@@ -265,6 +268,8 @@ Module* load_module(long& n_errors, const string& filename)
     return &inode2module[inode];
   }
   Module& mo = inode2module[inode];
+  if (! main_module)
+    main_module = &mo;
 
   string module{file != stdin ? filename : "main"};
   string::size_type t = module.find('.');
@@ -454,7 +459,7 @@ long load(const string& filename)
     return n_errors;
   }
 
-  if (! strcmp(opt_mode, "c++")) {
+  if (opt_mode == Mode::cxx) {
     if (opt_output_header_filename) {
       output_header = fopen(opt_output_header_filename, "w");
       if (! output_header) {
@@ -467,9 +472,25 @@ long load(const string& filename)
     generate_cxx(mo);
     if (output_header)
       fclose(output_header);
-  } else {
+  } else if (opt_mode == Mode::graphviz) {
     DP(1, "Generating Graphviz dot");
     generate_graphviz(mo);
+  }
+  else if (opt_mode == Mode::interactive) {
+    DP(1, "Testing given string");
+    DefineStmt* main_export = NULL;
+    for (Stmt* x = main_module->toplevel; x; x = x->next)
+      if (auto xx = dynamic_cast<DefineStmt*>(x))
+        if (xx->export_) {
+          main_export = xx;
+          break;
+        }
+    if (! main_export)
+      puts("no exporting DefineStmt");
+    else {
+      compile_export(main_export);
+      repl(compiled[main_export]);
+    }
   }
 
   fclose(output);

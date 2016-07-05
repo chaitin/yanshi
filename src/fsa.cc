@@ -38,15 +38,21 @@ void Fsa::check() const
              adj[i][j-1].first.second <= adj[i][j].first.first);
 }
 
-bool Fsa::has(long u, long a) const
+bool Fsa::has(long u, long c) const
 {
-  auto it = upper_bound(ALL(adj[u]), make_pair(make_pair(a, LONG_MAX), LONG_MAX));
-  return it != adj[u].begin() && a < (--it)->first.second;
+  auto it = upper_bound(ALL(adj[u]), make_pair(make_pair(c, LONG_MAX), LONG_MAX));
+  return it != adj[u].begin() && c < (--it)->first.second;
 }
 
 bool Fsa::has_special(long u) const
 {
   return lower_bound(ALL(adj[u]), make_pair(make_pair(AB, LONG_MIN), LONG_MIN)) != adj[u].end();
+}
+
+long Fsa::transit(long u, long c) const
+{
+  auto it = upper_bound(ALL(adj[u]), make_pair(make_pair(c, LONG_MAX), LONG_MAX));
+  return it != adj[u].begin() && c < (--it)->first.second ? it->second : -1;
 }
 
 bool Fsa::is_final(long x) const

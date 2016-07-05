@@ -13,6 +13,7 @@ _arguments \
   '--dump-tree[dump AST]' \
   '(-G --graph)'{-G,--graph}'[output a Graphviz dot file]' \
   '(-I --import)'{-I,--import}'=[add <dir> to search path for "import"]' \
+  '(-i --interactive)'{-i,--interactive}'=[interactive mode]' \
   '(-l --debug-output)'{-l,--debug-output}'[filename for debug output]:file:_files' \
   '(-o --output)'{-o,--output}'[.cc output filename]:file:_files' \
   '(-O --output-header)'{-O,--output-header}'[.hh output filename]:file:_files' \

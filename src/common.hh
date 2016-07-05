@@ -29,7 +29,7 @@ extern char*** _NSGetArgv(void);
 #define program_invocation_short_name (((char **)*_NSGetArgv())[0])
 #endif
 
-#define LEN_OF(x) (sizeof(x)/sizeof(*x))
+#define LEN(x) (sizeof(x)/sizeof(*x))
 #define ALL(x) (x).begin(), (x).end()
 #define REP(i, n) FOR(i, 0, n)
 #define FOR(i, a, b) for (typename std::remove_cv<typename std::remove_reference<decltype(b)>::type>::type i = (a); i < (b); i++)
@@ -42,16 +42,18 @@ extern char*** _NSGetArgv(void);
 #define BLUE "\x1b[1;34m"
 #define MAGENTA "\x1b[1;35m"
 #define CYAN "\x1b[1;36m"
+#define NORMAL_YELLOW "\x1b[33m"
 const long MAX_CODEPOINT = 0x10ffff;
 extern long action_label_base, action_label, collapse_label_base, collapse_label;
 
-void blue();
-void cyan();
-void green();
-void magenta();
-void red();
-void sgr0();
-void yellow();
+void blue(long fd = 1);
+void cyan(long fd = 1);
+void green(long fd = 1);
+void magenta(long fd = 1);
+void red(long fd = 1);
+void sgr0(long fd = 1);
+void yellow(long fd = 1);
+void normal_yellow(long fd = 1);
 void indent(FILE* f, int d);
 
 const size_t BUF_SIZE = 512;

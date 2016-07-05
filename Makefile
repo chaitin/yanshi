@@ -7,9 +7,9 @@ else
   LDLIBS := -lasan -lubsan
 endif
 
-CPPFLAGS := -Isrc -I.
+CPPFLAGS := -Isrc -I. -DHAVE_READLINE
 CXXFLAGS := $(CFLAGS)
-LDLIBS := -licuuc
+LDLIBS += -licuuc -lreadline
 SRC := $(filter-out src/lexer.cc src/parser.cc, $(wildcard src/*.cc)) src/lexer.cc src/parser.cc
 OBJ := $(addprefix $(BUILD)/,$(subst src/,,$(SRC:.cc=.o)))
 UNITTEST_SRC := $(wildcard unittest/*.cc)

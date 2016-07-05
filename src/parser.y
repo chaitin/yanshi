@@ -15,7 +15,7 @@
       (Loc).start = YYRHSLOC(Rhs, 1).start;     \
       (Loc).end = YYRHSLOC(Rhs, N).end;         \
     } else {                                    \
-      (Loc).start = YYRHSLOC(Rhs, 0).end;       \
+      (Loc).start = YYRHSLOC(Rhs, 0).start;     \
       (Loc).end = YYRHSLOC(Rhs, 0).end;         \
     }                                           \
   } while (0)
