@@ -227,7 +227,9 @@ void compile_actions(DefineStmt* stmt)
     if (auto t = dynamic_cast<InlineAction*>(action))
       return t->code;
     else if (auto t = dynamic_cast<RefAction*>(action))
-      return t->define_module->defined_action[t->ident];
+      return t->define_stmt->code;
+    else
+      assert(0);
     return string();
   };
 
@@ -239,9 +241,9 @@ void compile_actions(DefineStmt* stmt)
                    printf(S " %ld %ld-%ld %ld %s\n", u, from, to-1, v, t->code.c_str()); \
                else if (auto t = dynamic_cast<RefAction*>(action.first)) \
                  if (from == to-1) \
-                   printf(S " %ld %ld %ld %s\n", u, from, v, t->define_module->defined_action[t->ident].c_str()); \
+                   printf(S " %ld %ld %ld %s\n", u, from, v, t->define_stmt->code.c_str()); \
                  else \
-                   printf(S " %ld %ld-%ld %ld %s\n", u, from, to-1, v, t->define_module->defined_action[t->ident].c_str()); \
+                   printf(S " %ld %ld-%ld %ld %s\n", u, from, to-1, v, t->define_stmt->code.c_str()); \
              }
 
   if (output_header) {

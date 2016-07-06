@@ -21,9 +21,8 @@ using namespace std;
 static map<pair<dev_t, ino_t>, Module> inode2module;
 static unordered_map<DefineStmt*, vector<DefineStmt*>> depended_by; // key ranges over all DefineStmt
 static unordered_map<DefineStmt*, vector<Expr*>> used_as_collapse, used_as_embed;
-static Module* main_module;
 static DefineStmt* main_export;
-map<string, long> macro;
+Module* main_module;
 FILE *output, *output_header;
 
 void print_module_info(Module& mo)
@@ -43,6 +42,59 @@ void print_module_info(Module& mo)
     printf("  %s\n", x.first.c_str());
 }
 
+Stmt* resolve(Module& mo, const string qualified, const string& ident)
+{
+  if (qualified.size()) {
+    if (! mo.qualified_import.count(qualified))
+      return NULL;
+    auto it = mo.qualified_import[qualified]->defined.find(ident);
+    if (it == mo.qualified_import[qualified]->defined.end())
+      return NULL;
+    return it->second;
+  } else {
+    Stmt* r = NULL;
+    if (mo.macro.count(ident))
+      r = mo.macro[ident];
+    if (mo.defined.count(ident)) {
+      if (r) return (Stmt*)1;
+      r = mo.defined[ident];
+    }
+    for (auto* import: mo.unqualified_import) {
+      if (import->macro.count(ident)) {
+        if (r) return (Stmt*)1;
+        r = import->macro[ident];
+      }
+      if (import->defined.count(ident)) {
+        if (r) return (Stmt*)1;
+        r = import->defined[ident];
+      }
+    }
+    return r;
+  }
+}
+
+ActionStmt* resolve_action(Module& mo, const string qualified, const string& ident)
+{
+  if (qualified.size()) {
+    if (! mo.qualified_import.count(qualified))
+      return NULL;
+    auto it = mo.qualified_import[qualified]->defined_action.find(ident);
+    if (it == mo.qualified_import[qualified]->defined_action.end())
+      return NULL;
+    return it->second;
+  } else {
+    ActionStmt* r = NULL;
+    if (mo.defined_action.count(ident))
+      r = mo.defined_action[ident];
+    for (auto* import: mo.unqualified_import)
+      if (import->defined_action.count(ident)) {
+        if (r) return (ActionStmt*)1;
+        r = import->defined_action[ident];
+      }
+    return r;
+  }
+}
+
 struct ModuleImportDef : PreorderStmtVisitor {
   Module& mo;
   long& n_errors;
@@ -52,12 +104,12 @@ struct ModuleImportDef : PreorderStmtVisitor {
     if (mo.defined_action.count(stmt.ident)) {
       n_errors++;
       mo.locfile.error(stmt.loc, "redefined '%s'", stmt.ident.c_str());
-    }
-    mo.defined_action[stmt.ident] = stmt.code;
+    } else
+      mo.defined_action[stmt.ident] = &stmt;
   }
   // TODO report error: import 'aa.hs' (#define d 3) ; #define d 4
   void visit(DefineStmt& stmt) override {
-    if (mo.defined.count(stmt.lhs) || macro.count(stmt.lhs)) {
+    if (mo.defined.count(stmt.lhs) || mo.macro.count(stmt.lhs)) {
       n_errors++;
       mo.locfile.error(stmt.loc, "redefined '%s'", stmt.lhs.c_str());
     } else {
@@ -79,11 +131,11 @@ struct ModuleImportDef : PreorderStmtVisitor {
       mo.unqualified_import.push_back(m);
   }
   void visit(PreprocessDefineStmt& stmt) override {
-    if (mo.defined.count(stmt.ident) || macro.count(stmt.ident)) {
+    if (mo.defined.count(stmt.ident) || mo.macro.count(stmt.ident)) {
       n_errors++;
       mo.locfile.error(stmt.loc, "redefined '%s'", stmt.ident.c_str());
     } else
-      macro[stmt.ident] = stmt.value;
+      mo.macro[stmt.ident] = &stmt;
   }
 };
 
@@ -109,39 +161,18 @@ struct ModuleUse : PrePostActionExprStmtVisitor {
   }
 
   void visit(RefAction& action) override {
-    if (action.qualified.size()) {
-      if (! mo.qualified_import.count(action.qualified)) {
-        n_errors++;
-        mo.locfile.error(action.loc, "unknown module '%s'", action.qualified.c_str());
-      } else {
-        auto it = mo.qualified_import[action.qualified]->defined_action.find(action.ident);
-        if (it == mo.qualified_import[action.qualified]->defined_action.end()) {
-          n_errors++;
-          mo.locfile.error(action.loc, "'%s::%s' undefined", action.qualified.c_str(), action.ident.c_str());
-        } else
-          action.define_module = mo.qualified_import[action.qualified];
-      }
-    } else {
-      auto it = mo.defined_action.find(action.ident);
-      Module* module = it != mo.defined_action.end() ? &mo : NULL;
-      for (auto& import: mo.unqualified_import) {
-        auto it2 = import->defined_action.find(action.ident);
-        if (it2 != import->defined_action.end()) {
-          if (module) {
-            n_errors++;
-            mo.locfile.error(action.loc, "'%s' redefined in unqualified import '%s'", action.ident.c_str(), import->filename.c_str());
-          } else {
-            it = it2;
-            module = import;
-          }
-        }
-      }
-      if (! module) {
-        n_errors++;
+    ActionStmt* r = resolve_action(mo, action.qualified, action.ident);
+    if (! r) {
+      n_errors++;
+      if (action.qualified.size())
+        mo.locfile.error(action.loc, "'%s::%s' undefined", action.qualified.c_str(), action.ident.c_str());
+      else
         mo.locfile.error(action.loc, "'%s' undefined", action.ident.c_str());
-      } else
-        action.define_module = module;
-    }
+    } else if (r == (Stmt*)1) {
+      n_errors++;
+      mo.locfile.error(action.loc, "'%s' redefined", action.ident.c_str());
+    } else
+      action.define_stmt = r;
   }
 
   void visit(BracketExpr& expr) override {
@@ -149,43 +180,27 @@ struct ModuleUse : PrePostActionExprStmtVisitor {
       AB = max(AB, x.second);
   }
   void visit(CollapseExpr& expr) override {
-    if (expr.qualified.size()) {
-      if (! mo.qualified_import.count(expr.qualified)) {
-        n_errors++;
-        mo.locfile.error(expr.loc, "unknown module '%s'", expr.qualified.c_str());
-      } else {
-        auto it = mo.qualified_import[expr.qualified]->defined.find(expr.ident);
-        if (it == mo.qualified_import[expr.qualified]->defined.end()) {
-          n_errors++;
-          mo.locfile.error(expr.loc, "'%s::%s' undefined", expr.qualified.c_str(), expr.ident.c_str());
-        } else {
-          used_as_collapse[it->second].push_back(&expr);
-          expr.define_stmt = it->second;
-        }
-      }
-    } else {
-      auto it = mo.defined.find(expr.ident);
-      bool found = it != mo.defined.end();
-      for (auto& import: mo.unqualified_import) {
-        auto it2 = import->defined.find(expr.ident);
-        if (it2 != import->defined.end()) {
-          if (found) {
-            n_errors++;
-            mo.locfile.error(expr.loc, "'%s' redefined in unqualified import '%s'", expr.ident.c_str(), import->filename.c_str());
-          } else {
-            it = it2;
-            found = true;
-          }
-        }
-      }
-      if (! found) {
-        n_errors++;
+    Stmt* r = resolve(mo, expr.qualified, expr.ident);
+    if (! r) {
+      n_errors++;
+      if (expr.qualified.size())
+        mo.locfile.error(expr.loc, "'%s::%s' undefined", expr.qualified.c_str(), expr.ident.c_str());
+      else
         mo.locfile.error(expr.loc, "'%s' undefined", expr.ident.c_str());
-      } else {
-        used_as_collapse[it->second].push_back(&expr);
-        expr.define_stmt = it->second;
-      }
-    }
+    } else if (r == (Stmt*)1) {
+      n_errors++;
+      mo.locfile.error(expr.loc, "ambiguous '%s'", expr.ident.c_str());
+    } else if (auto d = dynamic_cast<PreprocessDefineStmt*>(r)) {
+      n_errors++;
+      if (expr.qualified.size())
+        mo.locfile.error(expr.loc, "macro '%s::%s' used as CollapseExpr", expr.qualified.c_str(), expr.ident.c_str());
+      else
+        mo.locfile.error(expr.loc, "macro '%s' used as CollapseExpr", expr.ident.c_str());
+    } else if (auto d = dynamic_cast<DefineStmt*>(r)) {
+      used_as_collapse[d].push_back(&expr);
+      expr.define_stmt = d;
+    } else
+      assert(0);
   }
   void visit(DefineStmt& stmt) override {
     this->stmt = &stmt;
@@ -194,50 +209,27 @@ struct ModuleUse : PrePostActionExprStmtVisitor {
   }
   void visit(EmbedExpr& expr) override {
     // almost the same to CollapseExpr except for the dependency
-    if (expr.qualified.size()) {
-      if (! mo.qualified_import.count(expr.qualified)) {
-        n_errors++;
-        mo.locfile.error(expr.loc, "unknown module '%s'", expr.qualified.c_str());
-      } else {
-        auto it = mo.qualified_import[expr.qualified]->defined.find(expr.ident);
-        if (it == mo.qualified_import[expr.qualified]->defined.end()) {
-          n_errors++;
-          mo.locfile.error(expr.loc, "'%s::%s' undefined", expr.qualified.c_str(), expr.ident.c_str());
-        } else {
-          depended_by[it->second].push_back(stmt);
-          used_as_embed[it->second].push_back(&expr);
-          expr.define_stmt = it->second;
-        }
-      }
-    } else {
-      if (macro.count(expr.ident)) {
-        expr.define_stmt = NULL;
-        AB = max(AB, macro[expr.ident]+1);
-        return;
-      }
-      auto it = mo.defined.find(expr.ident);
-      bool found = it != mo.defined.end();
-      for (auto& import: mo.unqualified_import) {
-        auto it2 = import->defined.find(expr.ident);
-        if (it2 != import->defined.end()) {
-          if (found) {
-            n_errors++;
-            mo.locfile.error(expr.loc, "'%s' redefined in unqualified import '%s'", expr.ident.c_str(), import->filename.c_str());
-          } else {
-            it = it2;
-            found = true;
-          }
-        }
-      }
-      if (! found) {
-        n_errors++;
+    Stmt* r = resolve(mo, expr.qualified, expr.ident);
+    if (! r) {
+      n_errors++;
+      if (expr.qualified.size())
+        mo.locfile.error(expr.loc, "'%s::%s' undefined", expr.qualified.c_str(), expr.ident.c_str());
+      else
         mo.locfile.error(expr.loc, "'%s' undefined", expr.ident.c_str());
-      } else {
-        depended_by[it->second].push_back(stmt);
-        used_as_embed[it->second].push_back(&expr);
-        expr.define_stmt = it->second;
-      }
-    }
+    } else if (r == (Stmt*)1) {
+      n_errors++;
+      mo.locfile.error(expr.loc, "ambiguous '%s'", expr.ident.c_str());
+    } else if (auto d = dynamic_cast<PreprocessDefineStmt*>(r)) {
+      // enlarge alphabet
+      expr.define_stmt = NULL;
+      expr.macro_value = d->value;
+      AB = max(AB, d->value+1);
+    } else if (auto d = dynamic_cast<DefineStmt*>(r)) {
+      depended_by[d].push_back(stmt);
+      used_as_embed[d].push_back(&expr);
+      expr.define_stmt = d;
+    } else
+      assert(0);
   }
 };
 
@@ -268,8 +260,6 @@ Module* load_module(long& n_errors, const string& filename)
     return &inode2module[inode];
   }
   Module& mo = inode2module[inode];
-  if (! main_module)
-    main_module = &mo;
 
   string module{file != stdin ? filename : "main"};
   string::size_type t = module.find('.');
@@ -364,6 +354,7 @@ long load(const string& filename)
   }
   if (mo->status == BAD)
     return n_errors;
+  main_module = mo;
 
   DP(1, "Processing import & def");
   for(;;) {

@@ -376,8 +376,7 @@ FsaAnno FsaAnno::embed(EmbedExpr& expr) {
     r.fsa.start = 0;
     r.fsa.finals = {1};
     r.fsa.adj.resize(2);
-    long c = macro[expr.ident];
-    r.fsa.adj[0].emplace_back(make_pair(c, c+1), 1);
+    r.fsa.adj[0].emplace_back(make_pair(expr.macro_value, expr.macro_value+1), 1);
     r.assoc.resize(2);
     r.add_assoc(expr);
     r.deterministic = true;

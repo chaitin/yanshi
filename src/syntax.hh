@@ -109,7 +109,7 @@ struct InlineAction : Visitable<Action, InlineAction> {
 struct Module;
 struct RefAction : Visitable<Action, RefAction> {
   string qualified, ident;
-  Module* define_module; // set by ModuleUse
+  ActionStmt* define_stmt; // set by ModuleUse
   RefAction(string& qualified, string& ident) : qualified(move(qualified)), ident(move(ident)) {}
 };
 
@@ -188,6 +188,7 @@ struct DotExpr : Visitable<Expr, DotExpr> {};
 struct EmbedExpr : Visitable<Expr, EmbedExpr> {
   string qualified, ident;
   DefineStmt* define_stmt = NULL; // set by ModuleUse
+  long macro_value; // set by ModuleUse
   EmbedExpr(string& qualified, string& ident) : qualified(move(qualified)), ident(move(ident)) {}
 };
 

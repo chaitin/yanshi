@@ -1,13 +1,13 @@
 #pragma once
 #include "syntax.hh"
 
-#include <map>
 #include <set>
 #include <string>
+#include <unordered_map>
 #include <vector>
-using std::map;
 using std::set;
 using std::string;
+using std::unordered_map;
 using std::vector;
 
 enum ModuleStatus { UNPROCESSED = 0, BAD, GOOD };
@@ -17,14 +17,16 @@ struct Module {
   LocationFile locfile;
   string filename;
   Stmt* toplevel;
-  map<string, DefineStmt*> defined;
+  unordered_map<string, DefineStmt*> defined;
   vector<Module*> unqualified_import;
-  map<string, Module*> qualified_import;
-  map<string, string> defined_action;
+  unordered_map<string, Module*> qualified_import;
+  unordered_map<string, ActionStmt*> defined_action;
+  unordered_map<string, PreprocessDefineStmt*> macro;
 };
 
+Stmt* resolve(Module& mo, const string qualified, const string& ident);
 long load(const string& filename);
 Module* load_module(long& n_errors, const string& filename);
 void unload_all();
-extern map<string, long> macro;
+extern Module* main_module;
 extern FILE *output, *output_header;
