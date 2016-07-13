@@ -360,8 +360,10 @@ Fsa Fsa::distinguish(function<void(vector<long>&)> relate) const
 {
   vector<long> scale;
   REP(i, n())
-    for (auto& e: adj[i])
+    for (auto& e: adj[i]) {
       scale.push_back(e.first.first);
+      scale.push_back(e.first.second);
+    }
   sort(ALL(scale));
   scale.erase(unique(ALL(scale)), scale.end());
 
