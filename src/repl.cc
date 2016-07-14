@@ -1,6 +1,8 @@
 #include "compiler.hh"
 #include "fsa_anno.hh"
 #include "loader.hh"
+#include "parser.hh"
+#include "lexer.hh" // after parser.hh
 #include "syntax.hh"
 
 #include <algorithm>
@@ -37,7 +39,7 @@ struct Command
              "  .automaton    dump automaton\n"
              "  .assoc        dump associated AST Expr for each state\n"
              "  .help         display this help\n"
-             "  .integer      input is a list of non-negative integers or macros(#define)\n"
+             "  .integer      input is a list of non-negative integers, macros(#define) or '' "" quoted strings\n"
              "  .macro        display defined macros\n"
              "  .string       input is a string\n"
              "  .stmt <ident> change target DefineStmt to <ident>\n"
@@ -46,7 +48,7 @@ struct Command
     }},
   {".integer",
     [](const char*) {
-      mode = ReplMode::integer; puts("Input a list of non-negative integers or macros to see the transitions");
+      mode = ReplMode::integer; puts(".integer mode");
     }},
   {".macro",
     [](const char*) {
@@ -73,7 +75,7 @@ struct Command
     }},
   {".string",
     [](const char*) {
-      mode = ReplMode::string; puts("Input a string to see the transitions");
+      mode = ReplMode::string; puts(".string mode");
     }
   },
   {".quit",
@@ -94,6 +96,20 @@ static char* command_completer(const char* text, int state)
     Command* x = &commands[i++];
     if (! strncmp(x->name, text, strlen(text)))
       return strdup(x->name);
+  }
+  return NULL;
+}
+
+static char* macro_completer(const char* text, int state)
+{
+  static Stmt* x;
+  if (! state)
+    x = main_module->toplevel;
+  while (x) {
+    auto xx = dynamic_cast<PreprocessDefineStmt*>(x);
+    x = x->next;
+    if (xx && ! strncmp(xx->ident.c_str(), text, strlen(text)))
+      return strdup(xx->ident.c_str());
   }
   return NULL;
 }
@@ -119,6 +135,8 @@ static char** on_complete(const char* text, int start, int end)
     return rl_completion_matches(text, command_completer);
   if (6 <= start && ! strncmp(rl_line_buffer, ".stmt ", 6))
     return rl_completion_matches(text, stmt_completer);
+  if (mode == ReplMode::integer)
+    return rl_completion_matches(text, macro_completer);
   return NULL;
 }
 #else
@@ -191,14 +209,14 @@ void repl(DefineStmt* stmt)
     }
 
     long u = anno->fsa.start;
-    int32_t i = 0, len;
-    if (anno->fsa.is_final(u)) yellow(1);
-    else normal_yellow(1);
-    printf("%ld ", u); sgr0();
 
     if (mode == ReplMode::string) {
+      i32 i = 0, len;
       long c;
       len = strlen(line);
+      if (anno->fsa.is_final(u)) yellow(1);
+      else normal_yellow(1);
+      printf("%ld ", u); sgr0();
       while (i < len) {
         U8_NEXT_OR_FFFD(line, i, len, c);
         if (iswcntrl(c)) printf("%ld ", c);
@@ -210,41 +228,71 @@ void repl(DefineStmt* stmt)
         if (u < 0) break;
       }
     } else {
-      long c;
-      string s;
-      ss.clear();
-      ss.str(line);
-      while (ss >> s) {
-        try {
-          c = stol(s);
-        } catch (invalid_argument& ex) {
-          Stmt* stmt = resolve(*main_module, "", s);
+      vector<long> input;
+      int token;
+      yyscan_t lexer;
+      raw_yylex_init_extra(0, &lexer);
+      YY_BUFFER_STATE buf = raw_yy_scan_bytes(line, strlen(line), lexer);
+      YYSTYPE yylval;
+      YYLTYPE yylloc;
+      while (u >= 0 && (token = raw_yylex(&yylval, &yylloc, lexer)) != 0) {
+        switch (token) { // all tokens with a destructor should be listed
+        case IDENT: {
+          Stmt* stmt = resolve(*main_module, "", yylval.str->c_str());
           if (! stmt) {
-            printf("'%s' undefined", s.c_str());
+            printf("'%s' undefined", yylval.str->c_str());
             u = -1;
-            break;
           } else if (stmt == (Stmt*)1) {
-            printf("ambiguous '%s'", s.c_str());
+            printf("ambiguous '%s'", yylval.str->c_str());
             u = -1;
-            break;
-          }
-          if (auto d = dynamic_cast<PreprocessDefineStmt*>(stmt))
-            c = d->value;
+          } else if (auto d = dynamic_cast<PreprocessDefineStmt*>(stmt))
+            input.push_back(d->value);
           else if (auto d = dynamic_cast<DefineStmt*>(stmt)) {
+            printf("'%s' is not a macro", yylval.str->c_str());
             u = -1;
-            break;
           } else
             assert(0);
-        } catch (out_of_range& ex) {
+          delete yylval.str;
+          break;
+        }
+        case INTEGER:
+          input.push_back(yylval.integer);
+          break;
+        case STRING_LITERAL:
+          if (opt_bytes)
+            for (unsigned char c: *yylval.str)
+              input.push_back(c);
+          else
+            for (i32 c, i = 0; i < yylval.str->size(); ) {
+              U8_NEXT_OR_FFFD(yylval.str->c_str(), i, yylval.str->size(), c);
+              input.push_back(c);
+            }
+          delete yylval.str;
+          break;
+        case BRACED_CODE:
+          delete yylval.str;
+          // fall through
+        default:
+          printf("invalid token at column %ld-%ld\n", yylloc.start+1, yylloc.end);
           u = -1;
           break;
         }
-        printf("%ld ", c);
-        u = anno->fsa.transit(u, c);
-        if (anno->fsa.is_final(u)) yellow();
-        else normal_yellow();
+      }
+      raw_yy_delete_buffer(buf, lexer);
+      raw_yylex_destroy(lexer);
+
+      if (u >= 0) {
+        if (anno->fsa.is_final(u)) yellow(1);
+        else normal_yellow(1);
         printf("%ld ", u); sgr0();
-        if (u < 0) break;
+        for (long c: input) {
+          printf("%ld ", c);
+          u = anno->fsa.transit(u, c);
+          if (anno->fsa.is_final(u)) yellow();
+          else normal_yellow();
+          printf("%ld ", u); sgr0();
+          if (u < 0) break;
+        }
       }
     }
     free(line);
