@@ -44,7 +44,7 @@ extern char*** _NSGetArgv(void);
 #define CYAN "\x1b[1;36m"
 #define NORMAL_YELLOW "\x1b[33m"
 const long MAX_CODEPOINT = 0x10ffff;
-extern long action_label_base, action_label, collapse_label_base, collapse_label;
+extern long action_label_base, action_label, call_label_base, call_label, collapse_label_base, collapse_label;
 
 void bold(long fd = 1);
 void blue(long fd = 1);

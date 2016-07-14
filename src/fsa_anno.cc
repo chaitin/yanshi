@@ -38,9 +38,9 @@ void FsaAnno::add_assoc(Expr& expr)
 {
   // has actions: actions need tags to differentiate 'entering', 'leaving', ...
   // 'intact': states with the 'inner' tag cannot be connected to start/final in substring grammar
-  // 'CollapseExpr': differentiate states representing 'CollapseExpr' (u, special, v)
+  // 'CallExpr' 'CollapseExpr': differentiate states representing 'CallExpr' 'CollapseExpr' (u, special, v)
   // 'opt_mode': displaying possible positions for given strings in interactive mode
-  if (expr.no_action() && ! expr.stmt->intact && ! dynamic_cast<CollapseExpr*>(&expr) && opt_mode != Mode::interactive)
+  if (expr.no_action() && ! expr.stmt->intact && ! dynamic_cast<CallExpr*>(&expr) && ! dynamic_cast<CollapseExpr*>(&expr) && opt_mode != Mode::interactive)
     return;
   auto j = fsa.finals.begin();
   REP(i, fsa.n()) {
@@ -69,27 +69,30 @@ void FsaAnno::add_assoc(Expr& expr)
     }
 }
 
-void FsaAnno::accessible() {
+void FsaAnno::accessible(const vector<long>* starts, vector<long>& mapping) {
   long allo = 0;
   auto relate = [&](long x) {
     if (allo != x)
       assoc[allo] = move(assoc[x]);
     allo++;
+    mapping.push_back(x);
   };
-  fsa.accessible(relate);
+  fsa.accessible(starts, relate);
   assoc.resize(allo);
 }
 
-void FsaAnno::co_accessible() {
+void FsaAnno::co_accessible(const vector<bool>* final, vector<long>& mapping) {
   long allo = 0;
   auto relate = [&](long x) {
     if (allo != x)
       assoc[allo] = move(assoc[x]);
     allo++;
+    mapping.push_back(x);
   };
-  fsa.co_accessible(relate);
+  fsa.co_accessible(final, relate);
   if (fsa.finals.empty()) { // 'start' does not produce acceptable strings
     assoc.assign(1, {});
+    mapping.assign(1, 0);
     deterministic = true;
     return;
   }
@@ -101,7 +104,7 @@ void FsaAnno::co_accessible() {
 
 void FsaAnno::complement(ComplementExpr* expr) {
   if (! deterministic)
-    fsa = fsa.determinize([&](long, const vector<long>&){});
+    fsa = fsa.determinize(NULL, [&](long, const vector<long>&){});
   fsa = ~ fsa;
   assoc.assign(fsa.n(), {});
   deterministic = true;
@@ -127,19 +130,24 @@ void FsaAnno::concat(FsaAnno& rhs, ConcatExpr* expr) {
   deterministic = false;
 }
 
-void FsaAnno::determinize() {
+void FsaAnno::determinize(const vector<long>* starts, vector<vector<long>>* mapping) {
   if (deterministic)
     return;
   decltype(assoc) new_assoc;
   auto relate = [&](long id, const vector<long>& xs) {
-    if (id+1 > new_assoc.size())
+    if (id+1 > new_assoc.size()) {
       new_assoc.resize(id+1);
+      if (mapping)
+        mapping->resize(id+1);
+    }
     auto& as = new_assoc[id];
     for (long x: xs)
       as.insert(as.end(), ALL(assoc[x]));
     sort_assoc(as);
+    if (mapping)
+      (*mapping)[id] = xs;
   };
-  fsa = fsa.determinize(relate);
+  fsa = fsa.determinize(starts, relate);
   assoc = move(new_assoc);
   deterministic = true;
 }
@@ -164,9 +172,9 @@ void FsaAnno::difference(FsaAnno& rhs, DifferenceExpr* expr) {
     }
   };
   if (! deterministic)
-    fsa = fsa.determinize(relate0);
+    fsa = fsa.determinize(NULL, relate0);
   if (! rhs.deterministic)
-    rhs.fsa = rhs.fsa.determinize([](long, const vector<long>&) {});
+    rhs.fsa = rhs.fsa.determinize(NULL, [](long, const vector<long>&) {});
   fsa = fsa.difference(rhs.fsa, relate);
   assoc = move(new_assoc);
   if (expr)
@@ -215,9 +223,9 @@ void FsaAnno::intersect(FsaAnno& rhs, IntersectExpr* expr) {
     sort_assoc(as);
   };
   if (! deterministic)
-    fsa = fsa.determinize(relate0);
+    fsa = fsa.determinize(NULL, relate0);
   if (! rhs.deterministic)
-    rhs.fsa = rhs.fsa.determinize(relate1);
+    rhs.fsa = rhs.fsa.determinize(NULL, relate1);
   fsa = fsa.intersect(rhs.fsa, relate);
   assoc = move(new_assoc);
   if (expr)
@@ -225,7 +233,7 @@ void FsaAnno::intersect(FsaAnno& rhs, IntersectExpr* expr) {
   deterministic = true;
 }
 
-void FsaAnno::minimize() {
+void FsaAnno::minimize(vector<vector<long>>* mapping) {
   assert(deterministic);
   decltype(assoc) new_assoc;
   auto relate = [&](vector<long>& xs) {
@@ -234,6 +242,8 @@ void FsaAnno::minimize() {
     for (long x: xs)
       as.insert(as.end(), ALL(assoc[x]));
     sort_assoc(as);
+    if (mapping)
+      mapping->push_back(xs);
   };
   fsa = fsa.distinguish(relate);
   assoc = move(new_assoc);
@@ -339,6 +349,20 @@ FsaAnno FsaAnno::bracket(BracketExpr& expr) {
   return r;
 }
 
+FsaAnno FsaAnno::call(CallExpr& expr) {
+  // represented by (0, special, 1)
+  FsaAnno r;
+  r.fsa.start = 0;
+  r.fsa.finals = {1};
+  r.fsa.adj.resize(2);
+  r.fsa.adj[0].emplace_back(make_pair(call_label, call_label+1), 1);
+  call_label++;
+  r.assoc.resize(2);
+  r.add_assoc(expr);
+  r.deterministic = true;
+  return r;
+}
+
 FsaAnno FsaAnno::collapse(CollapseExpr& expr) {
   // represented by (0, special, 1)
   FsaAnno r;
@@ -369,6 +393,20 @@ FsaAnno FsaAnno::dot(DotExpr* expr) {
 FsaAnno FsaAnno::embed(EmbedExpr& expr) {
   if (expr.define_stmt) {
     FsaAnno r = compiled[expr.define_stmt];
+    // change the labels to differentiate instances of CallExpr
+    REP(i, r.fsa.n()) {
+      auto it = upper_bound(ALL(r.fsa.adj[i]), make_pair(make_pair(call_label_base, LONG_MAX), LONG_MAX));
+      if (it != r.fsa.adj[i].begin() && call_label_base < (it-1)->first.second)
+        --it;
+      for (; it != r.fsa.adj[i].end() && it->first.first < call_label; ++it) {
+        assert(call_label_base <= it->first.first);
+        long t = it->first.second-it->first.first;
+        it->first.first = call_label;
+        call_label += t;
+        it->first.second = call_label;
+        assert(it->first.second <= call_label);
+      }
+    }
     r.add_assoc(expr);
     return r;
   } else { // macro

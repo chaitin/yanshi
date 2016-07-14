@@ -12,7 +12,9 @@
 #include <unordered_map>
 using namespace std;
 
-map<DefineStmt*, FsaAnno> compiled;
+unordered_map<DefineStmt*, FsaAnno> compiled;
+static unordered_map<DefineStmt*, vector<pair<long, long>>> stmt2call_addr;
+static unordered_map<DefineStmt*, vector<bool>> stmt2final;
 
 void print_assoc(const FsaAnno& anno)
 {
@@ -116,6 +118,9 @@ struct Compiler : Visitor<Expr> {
   void visit(BracketExpr& expr) override {
     st.push(FsaAnno::bracket(expr));
   }
+  void visit(CallExpr& expr) override {
+    st.push(FsaAnno::call(expr));
+  }
   void visit(CollapseExpr& expr) override {
     st.push(FsaAnno::collapse(expr));
   }
@@ -185,14 +190,16 @@ void compile(DefineStmt* stmt)
   Compiler comp;
   comp.visit(*stmt->rhs);
   anno = move(comp.st.top());
-  anno.determinize();
-  anno.minimize();
+  anno.determinize(NULL, NULL);
+  anno.minimize(NULL);
   DP(4, "size(%s::%s) = %ld", stmt->module->filename.c_str(), stmt->lhs.c_str(), anno.fsa.n());
 }
 
-void compile_actions(DefineStmt* stmt)
+void generate_transitions(DefineStmt* stmt)
 {
   FsaAnno& anno = compiled[stmt];
+  auto& call_addr = stmt2call_addr[stmt];
+  auto& sub_final = stmt2final[stmt];
   auto find_within = [&](long u) {
     vector<pair<Expr*, ExprTag>> within;
     Expr* last = NULL;
@@ -234,35 +241,47 @@ void compile_actions(DefineStmt* stmt)
   };
 
 #define D(S) if (opt_dump_action) { \
-               if (auto t = dynamic_cast<InlineAction*>(action.first)) \
+               if (auto t = dynamic_cast<InlineAction*>(action.first)) { \
                  if (from == to-1) \
                    printf(S " %ld %ld %ld %s\n", u, from, v, t->code.c_str()); \
                  else \
                    printf(S " %ld %ld-%ld %ld %s\n", u, from, to-1, v, t->code.c_str()); \
-               else if (auto t = dynamic_cast<RefAction*>(action.first)) \
+               } else if (auto t = dynamic_cast<RefAction*>(action.first)) { \
                  if (from == to-1) \
                    printf(S " %ld %ld %ld %s\n", u, from, v, t->define_stmt->code.c_str()); \
                  else \
                    printf(S " %ld %ld-%ld %ld %s\n", u, from, to-1, v, t->define_stmt->code.c_str()); \
+               } \
              }
 
   if (output_header) {
-    fprintf(output_header, "long yanshi_%s_transit(long u, long c", stmt->lhs.c_str());
+    if (opt_gen_c) fprintf(output_header, "extern \"C\" ");
+    fprintf(output_header, "long yanshi_%s_transit(vector<long>& ret_stack, long u, long c", stmt->lhs.c_str());
     if (stmt->export_params.size())
       fprintf(output_header, ", %s", stmt->export_params.c_str());
     fprintf(output_header, ");\n");
   }
-  fprintf(output, "long yanshi_%s_transit(long u, long c", stmt->lhs.c_str());
+  if (opt_gen_c) fprintf(output, "extern \"C\" ");
+  fprintf(output, "long yanshi_%s_transit(vector<long>& ret_stack, long u, long c", stmt->lhs.c_str());
   if (stmt->export_params.size())
     fprintf(output, ", %s", stmt->export_params.c_str());
-  fprintf(output, ")\n");
-  fprintf(output, "{\n");
-  indent(output, 1);
-  fprintf(output, "long v = -1;\n");
-  indent(output, 1);
-  fprintf(output, "switch (u) {\n");
+fprintf(output,
+")\n"
+"{\n"
+"  long v = -1;\n"
+"again:\n"
+"  switch (u) {\n");
   REP(u, anno.fsa.n()) {
-    if (anno.fsa.adj[u].empty())
+    if (call_addr[u].first >= 0) { // no other transitions
+      fprintf(output,
+"  case %ld:\n"
+"    u = %ld;\n"
+"    ret_stack.push_back(%ld);\n"
+"    goto again;\n"
+, u, call_addr[u].first, call_addr[u].second);
+      continue;
+    }
+    if (anno.fsa.adj[u].empty() && ! sub_final[u])
       continue;
     indent(output, 1);
     fprintf(output, "case %ld:\n", u);
@@ -334,17 +353,23 @@ void compile_actions(DefineStmt* stmt)
       }
       indent(output, 3);
       fprintf(output, "v = %ld;\n", x.first);
+
+      // actions
       sort(ALL(x.second.second), [](const pair<Action*, long>& a0, const pair<Action*, long>& a1) {
         return a0.second != a1.second ? a0.second < a1.second : a0.first < a1.first;
       });
       x.second.second.erase(unique(ALL(x.second.second)), x.second.second.end());
-        /*return a0.first == a1.first;
-      }), x.second.second.end());
-      x.second.second.erase(unique(ALL(x.second.second), [](const pair<Action*, long>& a0, const pair<Action*, long>& a1) {
-        return a0.first == a1.first;
-      }), x.second.second.end());*/
       for (auto a: x.second.second)
         fprintf(output, "{%s}\n", get_code(a.first).c_str());
+      indent(output, 3);
+      fprintf(output, "break;\n");
+    }
+    // return from finals of DefineStmt called by CallExpr
+    if (sub_final[u]) {
+      indent(output, 2);
+      fprintf(output, "default:\n");
+      indent(output, 3);
+      fprintf(output, "if (ret_stack.size()) { u = ret_stack.back(); ret_stack.pop_back(); goto again; }\n");
       indent(output, 3);
       fprintf(output, "break;\n");
     }
@@ -361,66 +386,80 @@ void compile_actions(DefineStmt* stmt)
   fprintf(output, "}\n\n");
 }
 
-void compile_export(DefineStmt* stmt)
+bool compile_export(DefineStmt* stmt)
 {
   DP(2, "Exporting %s", stmt->lhs.c_str());
   FsaAnno& anno = compiled[stmt];
 
-  DP(3, "Construct automaton with all referenced CollapseExpr's DefineStmt");
+  DP(3, "Construct automaton with all DefineStmt associated to referenced CallExpr/CollapseExpr");
   vector<vector<Edge>> adj;
   decltype(anno.assoc) assoc;
   vector<vector<DefineStmt*>> cllps;
   long allo = 0;
   unordered_map<DefineStmt*, long> stmt2offset;
-  function<void(DefineStmt*)> allocate_collapse = [&](DefineStmt* stmt) {
+  unordered_map<DefineStmt*, long> stmt2start;
+  unordered_map<long, DefineStmt*> start2stmt;
+  vector<long> starts;
+  vector<bool> sub_final;
+  function<void(DefineStmt*)> allocate = [&](DefineStmt* stmt) {
     if (stmt2offset.count(stmt))
       return;
     DP(4, "Allocate %ld to %s", allo, stmt->lhs.c_str());
     FsaAnno& anno = compiled[stmt];
     long base = stmt2offset[stmt] = allo;
     allo += anno.fsa.n();
+    sub_final.resize(allo);
+    if (used_as_call.count(stmt)) {
+      stmt2start[stmt] = base+anno.fsa.start;
+      start2stmt[base+anno.fsa.start] = stmt;
+      starts.push_back(base+anno.fsa.start);
+      for (long f: anno.fsa.finals)
+        sub_final[base+f] = true;
+    }
     adj.insert(adj.end(), ALL(anno.fsa.adj));
     REP(i, anno.fsa.n())
       for (auto& e: adj[base+i])
         e.second += base;
-    //adj.emplace_back(); // appeared in other automata, this is a vertex corresponding to the completion of 'stmt'
     assoc.insert(assoc.end(), ALL(anno.assoc));
-    //assoc.emplace_back();
-    CollapseExpr* e;
-    FOR(i, base, base+anno.fsa.n())
-      if (anno.fsa.has_collapse(i-base)) {
-        for (auto aa: assoc[i])
-          if (has_start(aa.second) && (e = dynamic_cast<CollapseExpr*>(aa.first))) {
+    FOR(i, base, base+anno.fsa.n()) {
+      for (auto aa: assoc[i])
+        if (has_start(aa.second)) {
+          if (auto* e = dynamic_cast<CallExpr*>(aa.first)) {
             DefineStmt* v = e->define_stmt;
-            allocate_collapse(v);
+            allocate(v);
+          } else if (auto* e = dynamic_cast<CollapseExpr*>(aa.first)) {
+            DefineStmt* v = e->define_stmt;
+            allocate(v);
             // (i@{CollapseExpr,...}, special, _) -> ({CollapseExpr,...}, epsilon, CollapseExpr.define_stmt.start)
             sorted_emplace(adj[i], epsilon, stmt2offset[v]+compiled[v].fsa.start);
           }
-        long j = adj[i].size();
-        while (j && collapse_label_base < adj[i][j-1].first.second) {
-          long v = adj[i][j-1].second;
-          if (adj[i][j-1].first.first < collapse_label_base)
-            adj[i][j-1].first.second = collapse_label_base;
-          else
-            j--;
-          for (auto aa: assoc[v])
-            if (has_final(aa.second) && (e = dynamic_cast<CollapseExpr*>(aa.first))) {
-              DefineStmt* w = e->define_stmt;
-              allocate_collapse(w);
-              // (_, special, v@{CollapseExpr,...}) -> (CollapseExpr.define_stmt.final, epsilon, v)
-              for (long f: compiled[w].fsa.finals) {
-                long g = stmt2offset[w]+f;
-                sorted_emplace(adj[g], epsilon, v);
-                if (g == i)
-                  j++;
-              }
-            }
         }
-        // remove (i, special, _)
-        adj[i].resize(j);
+      long j = adj[i].size();
+      while (j && collapse_label_base < adj[i][j-1].first.second) {
+        long v = adj[i][j-1].second;
+        if (adj[i][j-1].first.first < collapse_label_base)
+          adj[i][j-1].first.second = collapse_label_base;
+        else
+          j--;
+        CollapseExpr* e;
+        for (auto aa: assoc[v])
+          if (has_final(aa.second) && (e = dynamic_cast<CollapseExpr*>(aa.first))) {
+            DefineStmt* w = e->define_stmt;
+            allocate(w);
+            // (_, special, v@{CollapseExpr,...}) -> (CollapseExpr.define_stmt.final, epsilon, v)
+            for (long f: compiled[w].fsa.finals) {
+              long g = stmt2offset[w]+f;
+              sorted_emplace(adj[g], epsilon, v);
+              if (g == i)
+                j++;
+            }
+          }
       }
+      // remove (i, special, _)
+      adj[i].resize(j);
+    }
   };
-  allocate_collapse(stmt);
+  allocate(stmt);
   anno.fsa.adj = move(adj);
   anno.assoc = move(assoc);
   anno.deterministic = false;
@@ -433,20 +472,112 @@ void compile_export(DefineStmt* stmt)
     DP(3, "# of states: %ld", anno.fsa.n());
   }
 
+  vector<vector<long>> map0;
   DP(3, "Determinize");
-  anno.determinize();
-  DP(3, "# of states: %ld", anno.fsa.n());
-  DP(3, "Minimize");
-  anno.minimize();
-  DP(3, "# of states: %ld", anno.fsa.n());
-  DP(3, "Keep accessible states");
-  anno.accessible();
-  DP(3, "# of states: %ld", anno.fsa.n());
-  DP(3, "Keep co-accessible states");
-  anno.co_accessible();
+  anno.determinize(&starts, &map0);
+  vector<bool> sub_final2(anno.fsa.n());
+  REP(i, anno.fsa.n())
+    for (long u: map0[i]) {
+      if (sub_final[u])
+        sub_final2[i] = true;
+      if (start2stmt.count(u)) {
+        DefineStmt* stmt = start2stmt[u];
+        if (stmt2start[stmt] < 0) {
+          stmt->module->locfile.error_context(stmt->loc, "the start has been included in multiple DFA states");
+          return false;
+        }
+        stmt2start[stmt] = ~ i;
+      }
+    }
+  sub_final = move(sub_final2);
+  start2stmt.clear();
+  for (auto& it: stmt2start) {
+    it.second = ~ it.second;
+    start2stmt[it.second] = it.first;
+  }
   DP(3, "# of states: %ld", anno.fsa.n());
 
-  DP(3, "Removing action labels");
+  DP(3, "Minimize");
+  map0.clear();
+  anno.minimize(&map0);
+  sub_final2.assign(anno.fsa.n(), false);
+  REP(i, anno.fsa.n())
+    for (long u: map0[i]) {
+      if (sub_final[u])
+        sub_final2[i] = true;
+      if (start2stmt.count(u)) {
+        DefineStmt* stmt = start2stmt[u];
+        stmt2start[stmt] = i;
+      }
+    }
+  sub_final = move(sub_final2);
+  start2stmt.clear();
+  for (auto& it: stmt2start)
+    start2stmt[it.second] = it.first;
+  DP(3, "# of states: %ld", anno.fsa.n());
+
+  if (! opt_keep_inaccessible) {
+    DP(3, "Keep accessible states");
+    // roots: start, starts of DefineStmt associated to CallExpr
+    starts.clear();
+    for (auto& it: stmt2start)
+      starts.push_back(it.second);
+    vector<long> map1;
+    anno.accessible(&starts, map1);
+    sub_final2.assign(anno.fsa.n(), false);
+    REP(i, anno.fsa.n()) {
+      long u = map1[i];
+      sub_final2[i] = sub_final[u];
+      if (start2stmt.count(u))
+        stmt2start[start2stmt[u]] = i;
+    }
+    sub_final = move(sub_final2);
+    start2stmt.clear();
+    for (auto& it: stmt2start)
+      start2stmt[it.second] = it.first;
+    DP(3, "# of states: %ld", anno.fsa.n());
+
+    DP(3, "Keep co-accessible states");
+    // roots: finals, finals of DefineStmt associated to CallExpr
+    map1.clear();
+    anno.co_accessible(&sub_final, map1);
+    sub_final2.assign(anno.fsa.n(), false);
+    REP(i, anno.fsa.n()) {
+      long u = map1[i];
+      sub_final2[i] = sub_final[u];
+      if (start2stmt.count(u))
+        stmt2start[start2stmt[u]] = i;
+    }
+    sub_final = move(sub_final2);
+    start2stmt.clear();
+    for (auto& it: stmt2start)
+      start2stmt[it.second] = it.first;
+    DP(3, "# of states: %ld", anno.fsa.n());
+  }
+
+  stmt2final[stmt] = sub_final;
+  auto& call_addr = stmt2call_addr[stmt];
+  call_addr.assign(anno.fsa.n(), make_pair(-1L, -1L));
+  DP(3, "CallExpr");
+  REP(i, anno.fsa.n())
+    if (anno.fsa.has_call(i)) {
+      if (anno.fsa.adj[i].size() != 1 || anno.fsa.adj[i][0].first.second-anno.fsa.adj[i][0].first.first > 1) {
+        stmt->module->locfile.error_context(stmt->loc, "state %ld: CallExpr cannot coexist with other transitions", i);
+        for (auto it = anno.fsa.adj[i].begin(); it != anno.fsa.adj[i].end(); ) {
+          long from = it->first.first, to = it->first.second, v = it->second;
+          while (++it != anno.fsa.adj[i].end() && to == it->first.first && it->second == v)
+            to = it->first.second;
+          fprintf(stderr, "  (%ld,%ld)\n", from, to-1);
+        }
+        return false;
+      }
+      for (auto aa: anno.assoc[i])
+        if (has_start(aa.second))
+          if (auto* e = dynamic_cast<CallExpr*>(aa.first)) // unique
+            call_addr[i] = {stmt2start[e->define_stmt], anno.fsa.adj[i][0].second};
+    }
+
+  DP(3, "Removing action/CallExpr labels");
   REP(i, anno.fsa.n()) {
     long j = anno.fsa.adj[i].size();
     while (j && action_label_base < anno.fsa.adj[i][j-1].first.second)
@@ -457,10 +588,7 @@ void compile_export(DefineStmt* stmt)
     anno.fsa.adj[i].resize(j);
   }
 
-  if (opt_dump_automaton)
-    print_automaton(anno.fsa);
-  if (opt_dump_assoc)
-    print_assoc(anno);
+  return true;
 }
 
 //// Graphviz dot renderer
@@ -471,7 +599,6 @@ void generate_graphviz(Module* mo)
   for (Stmt* x = mo->toplevel; x; x = x->next)
     if (auto stmt = dynamic_cast<DefineStmt*>(x)) {
       if (stmt->export_) {
-        compile_export(stmt);
         FsaAnno& anno = compiled[stmt];
 
         fprintf(output, "digraph \"%s\" {\n", mo->filename.c_str());
@@ -525,66 +652,77 @@ void generate_graphviz(Module* mo)
 
 //// C++ renderer
 
-void generate_cxx_export(DefineStmt* stmt)
+static void generate_final(const char* name, const vector<bool>& final)
 {
-  compile_export(stmt);
-  FsaAnno& anno = compiled[stmt];
-
-  // yanshi_%s_init
-  if (output_header)
-      fprintf(output_header, "extern long yanshi_%s_start;\n", stmt->lhs.c_str());
-  fprintf(output, "long yanshi_%s_start = %ld;\n\n", stmt->lhs.c_str(), anno.fsa.start);
-
-  // yanshi_%s_final
-  if (output_header)
-      fprintf(output_header, "bool yanshi_%s_is_final(long u);\n", stmt->lhs.c_str());
-  fprintf(output, "bool yanshi_%s_is_final(long u)\n", stmt->lhs.c_str());
-  fprintf(output, "{\n");
-  fprintf(output, "  //static const long finals[] = {");
+  // comment
+  fprintf(output, "  //static const long %sfinals[] = {", name);
   bool first = true;
-  for (long f: anno.fsa.finals) {
+  REP(i, final.size())
+    if (final[i]) {
       if (first) first = false;
       else fprintf(output, ",");
-      fprintf(output, "%ld", f);
-  }
+      fprintf(output, "%ld", i);
+    }
   fprintf(output, "};\n");
-  fprintf(output, "  static const unsigned long finals[] = {");
-  auto it = anno.fsa.finals.begin();
-  for (long i = 0; i < anno.fsa.n(); i += CHAR_BIT*sizeof(long)) {
+
+  first = true;
+  fprintf(output, "  static const unsigned long %sfinal[] = {", name);
+  for (long j = 0, i = 0; i < final.size(); i += CHAR_BIT*sizeof(long)) {
       ulong mask = 0;
-      for (; it != anno.fsa.finals.end() && *it < i; ++it);
-      for (; it != anno.fsa.finals.end() && *it < i+CHAR_BIT*sizeof(long); ++it)
-          mask |= 1uL << *it-i;
+      for (; j < final.size() && j < i+CHAR_BIT*sizeof(long); j++)
+        if (final[j])
+          mask |= 1uL << j-i;
       if (i) fprintf(output, ",");
       fprintf(output, "%#lx", mask);
   }
   fprintf(output, "};\n");
-  fprintf(output, "  return 0 <= u && u < %ld && finals[u/(CHAR_BIT*sizeof(long))] >> (u%%(CHAR_BIT*sizeof(long))) & 1;\n", anno.fsa.n());
-  fprintf(output, "};\n\n");
+}
 
-  DP(3, "Compiling actions");
-  compile_actions(stmt);
+static void generate_cxx_export(DefineStmt* stmt)
+{
+  FsaAnno& anno = compiled[stmt];
+
+  // yanshi_%s_init
+  if (output_header)
+    fprintf(output_header, "extern long yanshi_%s_start;\n", stmt->lhs.c_str());
+  fprintf(output, "long yanshi_%s_start = %ld;\n\n", stmt->lhs.c_str(), anno.fsa.start);
+
+  // yanshi_%s_is_final
+  if (output_header) {
+    if (opt_gen_c) fprintf(output_header, "extern \"C\" ");
+    fprintf(output_header, "bool yanshi_%s_is_final(const vector<long>& ret_stack, long u);\n", stmt->lhs.c_str());
+  }
+  if (opt_gen_c) fprintf(output, "extern \"C\" ");
+  fprintf(output, "bool yanshi_%s_is_final(const vector<long>& ret_stack, long u)\n", stmt->lhs.c_str());
+  fprintf(output, "{\n");
+  vector<bool> final(anno.fsa.n());
+  for (long f: anno.fsa.finals)
+    final[f] = true;
+  generate_final("", final);
+  generate_final("sub_", stmt2final[stmt]);
+  fprintf(output,
+"  for (auto i = ret_stack.size(); i; u = ret_stack[--i])\n"
+"    if (! (0 <= u && u < %ld && sub_final[u/(CHAR_BIT*sizeof(long))] >> (u%%(CHAR_BIT*sizeof(long))) & 1))\n"
+"      return false;\n"
+"  return 0 <= u && u < %ld && final[u/(CHAR_BIT*sizeof(long))] >> (u%%(CHAR_BIT*sizeof(long))) & 1;\n"
+"};\n\n"
+, anno.fsa.n() , anno.fsa.n()
+);
+  generate_transitions(stmt);
 }
 
 void generate_cxx(Module* mo)
 {
   fprintf(output, "// Generated by 偃师, %s\n", mo->filename.c_str());
-  if (opt_gen_c) {
-    fprintf(output, "#include <limits.h>\n");
-    fprintf(output, "#include <stdbool.h>\n");
-    fprintf(output, "#include <stdlib.h>\n");
-  } else {
-    fprintf(output, "#include <algorithm>\n");
-    fprintf(output, "#include <limits.h>\n");
-    fprintf(output, "#include <vector>\n");
-    fprintf(output, "using namespace std;\n");
-  }
+  fprintf(output, "#include <limits.h>\n");
+  fprintf(output, "#include <vector>\n");
+  fprintf(output, "using namespace std;\n");
   if (opt_standalone) {
     fputs(
 "#include <algorithm>\n"
 "#include <codecvt>\n"
-"#include <locale.h>\n"
 "#include <locale>\n"
+"#include <locale.h>\n"
 "#include <stdint.h>\n"
 "#include <stdio.h>\n"
 "#include <string.h>\n"
@@ -595,31 +733,30 @@ void generate_cxx(Module* mo)
   }
   if (output_header) {
     fputs("#pragma once\n", output_header);
-    if (opt_gen_c) {
-      fprintf(output_header, "#include <stdbool.h>\n");
-      fprintf(output_header, "#include <stdlib.h>\n");
-    } else {
-      fprintf(output_header, "#include <algorithm>\n");
-      fprintf(output_header, "#include <vector>\n");
-      fprintf(output_header, "using std::vector;\n");
-    }
+    fprintf(output_header, "#include <vector>\n");
+    fprintf(output_header, "using std::vector;\n");
   }
   fprintf(output, "\n");
+  DefineStmt* main_export = NULL;
   for (Stmt* x = mo->toplevel; x; x = x->next)
     if (auto xx = dynamic_cast<DefineStmt*>(x)) {
-      if (xx->export_)
+      if (xx->export_) {
+        if (! main_export)
+          main_export = xx;
         generate_cxx_export(xx);
+      }
     } else if (auto xx = dynamic_cast<CppStmt*>(x))
       fprintf(output, "%s", xx->code.c_str());
-  if (opt_standalone) {
-    fputs(
+  if (opt_standalone && main_export) {
+    fprintf(output,
 "\n"
 "int main(int argc, char* argv[])\n"
 "{\n"
 "  setlocale(LC_ALL, \"\");\n"
 "  string utf8;\n"
 "  const char* p;\n"
-"  long c, u = yanshi_main_start, pref = 0;\n"
+"  long c, u = yanshi_%s_start, pref = 0;\n"
+"  vector<long> ret_stack;\n"
 "  if (argc == 2)\n"
 "    utf8 = argv[1];\n"
 "  else {\n"
@@ -629,17 +766,17 @@ void generate_cxx(Module* mo)
 "    fclose(f);\n"
 "  }\n"
 "  u32string utf32 = wstring_convert<codecvt_utf8<char32_t>, char32_t>{}.from_bytes(utf8);\n"
-"  printf(\"\\033[%s33m%ld \\033[m\", yanshi_main_is_final(u) ? \"1;\" : \"\", u);\n"
+"  printf(\"\\033[%%s33m%%ld \\033[m\", yanshi_%s_is_final(ret_stack, u) ? \"1;\" : \"\", u);\n"
 "  for (char32_t c: utf32) {\n"
-"    u = yanshi_main_transit(u, c);\n"
-"    if (iswcntrl(c)) printf(\"%d \", c);\n"
-"    else printf(\"%lc \", c);\n"
-"    printf(\"\\033[%s33m%ld \\033[m\", yanshi_main_is_final(u) ? \"1;\" : \"\", u);\n"
+"    u = yanshi_%s_transit(ret_stack, u, c);\n"
+"    if (iswcntrl(c)) printf(\"%%d \", c);\n"
+"    else printf(\"%%lc \", c);\n"
+"    printf(\"\\033[%%s33m%%ld \\033[m\", yanshi_%s_is_final(ret_stack, u) ? \"1;\" : \"\", u);\n"
 "    if (u < 0) break;\n"
 "    pref++;\n"
 "  }\n"
-"  printf(\"\\nlen: %zd\\npref: %ld\\nstate: %ld\\nfinal: %s\\n\", utf32.size(), pref, u, yanshi_main_is_final(u) ? \"true\" : \"false\");\n"
+"  printf(\"\\nlen: %%zd\\npref: %%ld\\nstate: %%ld\\nfinal: %%s\\n\", utf32.size(), pref, u, yanshi_%s_is_final(ret_stack, u) ? \"true\" : \"false\");\n"
 "}\n"
-, output);
+, main_export->lhs.c_str() , main_export->lhs.c_str() , main_export->lhs.c_str() , main_export->lhs.c_str() , main_export->lhs.c_str());
   }
 }

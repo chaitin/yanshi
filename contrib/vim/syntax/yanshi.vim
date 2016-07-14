@@ -10,6 +10,7 @@ syn keyword yanshiStorageClass export intact
 syn keyword yanshiTodo contained TODO FIXME XXX
 syn match yanshiCpp 'c++'
 syn match yanshiActionOperator '[>$@%]'
+syn match yanshiCall '\^\w\+\(::\w\+\)\?'
 syn match yanshiCollapse '!\w\+\(::\w\+\)\?'
 syn match yanshiHighOp '[+\*?]'
 syn match yanshiIdent '\w\+\(::\w\+\)\?'
@@ -28,7 +29,7 @@ syn region yanshiQString start=+'+ skip=+\\.+ end=+'+
 
 syn region yanshiDefineStmt start='^\w\+\s*[=:]' end='$' skipnl contains=@yanshiExpr,yanshiComment,yanshiLineComment,yanshiParen0
 
-syn cluster yanshiExpr contains=yanshiActionOperator,yanshiBrace,yanshiBracket,yanshiCollapse,yanshiIdent,yanshiHighOp,yanshiLowOp,yanshiQString,yanshiQQString,
+syn cluster yanshiExpr contains=yanshiActionOperator,yanshiBrace,yanshiBracket,yanshiCall,yanshiCollapse,yanshiIdent,yanshiHighOp,yanshiLowOp,yanshiQString,yanshiQQString,
 sy region yanshiParen0 matchgroup=yanshiParen0 start='(' end=')' contains=@yanshiExpr,yanshiParen1
 sy region yanshiParen1 matchgroup=yanshiParen1 start='(' end=')' contains=@yanshiExpr,yanshiParen2 contained
 sy region yanshiParen2 matchgroup=yanshiParen2 start='(' end=')' contains=@yanshiExpr,yanshiParen3 contained
@@ -46,6 +47,7 @@ hi link yanshiIdent          Identifier
 "TODO color mismatch of {}
 "hi link yanshiBrace          Statement
 "hi link yanshiDefineStmt     Statement
+hi def link yanshiCall           Constant
 hi def link yanshiCollapse       Constant
 hi def link yanshiAction         Structure
 hi def link yanshiActionOperator Type

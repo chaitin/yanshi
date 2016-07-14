@@ -1,10 +1,12 @@
 #pragma once
 #include "syntax.hh"
 
+#include <map>
 #include <set>
 #include <string>
 #include <unordered_map>
 #include <vector>
+using std::map;
 using std::set;
 using std::string;
 using std::unordered_map;
@@ -30,3 +32,4 @@ Module* load_module(long& n_errors, const string& filename);
 void unload_all();
 extern Module* main_module;
 extern FILE *output, *output_header;
+extern map<DefineStmt*, vector<Expr*>> used_as_call, used_as_collapse, used_as_embed;

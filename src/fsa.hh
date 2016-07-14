@@ -20,14 +20,15 @@ struct Fsa {
   long n() const { return adj.size(); }
   bool is_final(long x) const;
   bool has(long u, long c) const;
-  bool has_collapse(long u) const;
+  bool has_call(long u) const;
+  bool has_call_or_collapse(long u) const;
   long transit(long u, long c) const;
   void epsilon_closure(vector<long>& src) const;
   Fsa operator~() const;
   // a -> a
-  void accessible(function<void(long)> relate);
+  void accessible(const vector<long>* starts, function<void(long)> relate);
   // a -> a
-  void co_accessible(function<void(long)> relate);
+  void co_accessible(const vector<bool>* final, function<void(long)> relate);
   // DFA -> DFA -> DFA
   Fsa intersect(const Fsa& rhs, function<void(long, long)> relate) const;
   // DFA -> DFA -> DFA
@@ -35,5 +36,5 @@ struct Fsa {
   // DFA -> DFA
   Fsa distinguish(function<void(vector<long>&)> relate) const;
   // * -> DFA
-  Fsa determinize(function<void(long, const vector<long>&)> relate) const;
+  Fsa determinize(const vector<long>* starts, function<void(long, const vector<long>&)> relate) const;
 };

@@ -42,6 +42,7 @@ struct Visitor<Action> {
 
 struct Expr;
 struct BracketExpr;
+struct CallExpr;
 struct CollapseExpr;
 struct ComplementExpr;
 struct ConcatExpr;
@@ -60,6 +61,7 @@ template<>
 struct Visitor<Expr> {
   virtual void visit(Expr&) = 0;
   virtual void visit(BracketExpr&) = 0;
+  virtual void visit(CallExpr&) = 0;
   virtual void visit(CollapseExpr&) = 0;
   virtual void visit(ComplementExpr&) = 0;
   virtual void visit(ConcatExpr&) = 0;
@@ -149,6 +151,12 @@ struct Expr : VisitableBase<Expr> {
 struct BracketExpr : Visitable<Expr, BracketExpr> {
   DisjointIntervals intervals;
   BracketExpr(DisjointIntervals* intervals) : intervals(std::move(*intervals)) { delete intervals; }
+};
+
+struct CallExpr : Visitable<Expr, CallExpr> {
+  string qualified, ident;
+  DefineStmt* define_stmt = NULL; // set by ModuleUse
+  CallExpr(string& qualified, string& ident) : qualified(move(qualified)), ident(move(ident)) {}
 };
 
 struct CollapseExpr : Visitable<Expr, CollapseExpr> {
@@ -362,6 +370,14 @@ struct StmtPrinter : Visitor<Action>, Visitor<Expr>, Visitor<Stmt> {
       printf("(%ld,%ld) ", x.first, x.second);
     puts("");
   }
+  void visit(CallExpr& expr) override {
+    printf("%*s%s\n", 2*depth, "", "CallExpr");
+    printf("%*s", 2*(depth+1), "");
+    if (expr.qualified.size())
+      printf("%s::%s\n", expr.qualified.c_str(), expr.ident.c_str());
+    else
+      printf("%s\n", expr.ident.c_str());
+  }
   void visit(CollapseExpr& expr) override {
     printf("%*s%s\n", 2*depth, "", "CollapseExpr");
     printf("%*s", 2*(depth+1), "");
@@ -519,6 +535,7 @@ struct PrePostActionExprStmtVisitor : Visitor<Action>, Visitor<Expr>, Visitor<St
     post_expr(expr);
   }
   void visit(BracketExpr& expr) override {}
+  void visit(CallExpr& expr) override {}
   void visit(CollapseExpr& expr) override {}
   void visit(ComplementExpr& expr) override { visit(*expr.inner); }
   void visit(ConcatExpr& expr) override {

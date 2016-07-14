@@ -19,15 +19,15 @@ struct FsaAnno {
   bool deterministic;
   Fsa fsa;
   vector<vector<pair<Expr*, ExprTag>>> assoc;
-  void accessible();
+  void accessible(const vector<long>* starts, vector<long>& mapping);
   void add_assoc(Expr& expr);
   void complement(ComplementExpr* expr);
-  void co_accessible();
+  void co_accessible(const vector<bool>* final, vector<long>& mapping);
   void concat(FsaAnno& rhs, ConcatExpr* expr);
-  void determinize();
+  void determinize(const vector<long>* starts, vector<vector<long>>* mapping);
   void difference(FsaAnno& rhs, DifferenceExpr* expr);
   void intersect(FsaAnno& rhs, IntersectExpr* expr);
-  void minimize();
+  void minimize(vector<vector<long>>* mapping);
   void plus(PlusExpr* expr);
   void question(QuestionExpr* expr);
   void repeat(RepeatExpr& expr);
@@ -35,6 +35,7 @@ struct FsaAnno {
   void substring_grammar();
   void union_(FsaAnno& rhs, UnionExpr* expr);
   static FsaAnno bracket(BracketExpr& expr);
+  static FsaAnno call(CallExpr& expr);
   static FsaAnno collapse(CollapseExpr& expr);
   static FsaAnno dot(DotExpr* expr);
   static FsaAnno embed(EmbedExpr& expr);

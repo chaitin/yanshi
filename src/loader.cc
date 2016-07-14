@@ -20,7 +20,7 @@ using namespace std;
 
 static map<pair<dev_t, ino_t>, Module> inode2module;
 static unordered_map<DefineStmt*, vector<DefineStmt*>> depended_by; // key ranges over all DefineStmt
-static unordered_map<DefineStmt*, vector<Expr*>> used_as_collapse, used_as_embed;
+map<DefineStmt*, vector<Expr*>> used_as_call, used_as_collapse, used_as_embed;
 static DefineStmt* main_export;
 Module* main_module;
 FILE *output, *output_header;
@@ -179,24 +179,29 @@ struct ModuleUse : PrePostActionExprStmtVisitor {
     for (auto& x: expr.intervals.to)
       AB = max(AB, x.second);
   }
+  void visit(CallExpr& expr) override {
+    Stmt* r = resolve(mo, expr.qualified, expr.ident);
+    if (! r)
+      error_undefined(expr.loc, expr.qualified, expr.ident);
+    else if (r == (Stmt*)1)
+      error_ambiguous(expr.loc, expr.ident);
+    else if (auto d = dynamic_cast<PreprocessDefineStmt*>(r))
+      error_misuse_macro("CallExpr", expr.loc, expr.qualified, expr.ident);
+    else if (auto d = dynamic_cast<DefineStmt*>(r)) {
+      used_as_call[d].push_back(&expr);
+      expr.define_stmt = d;
+    } else
+      assert(0);
+  }
   void visit(CollapseExpr& expr) override {
     Stmt* r = resolve(mo, expr.qualified, expr.ident);
-    if (! r) {
-      n_errors++;
-      if (expr.qualified.size())
-        mo.locfile.error(expr.loc, "'%s::%s' undefined", expr.qualified.c_str(), expr.ident.c_str());
-      else
-        mo.locfile.error(expr.loc, "'%s' undefined", expr.ident.c_str());
-    } else if (r == (Stmt*)1) {
-      n_errors++;
-      mo.locfile.error(expr.loc, "ambiguous '%s'", expr.ident.c_str());
-    } else if (auto d = dynamic_cast<PreprocessDefineStmt*>(r)) {
-      n_errors++;
-      if (expr.qualified.size())
-        mo.locfile.error(expr.loc, "macro '%s::%s' used as CollapseExpr", expr.qualified.c_str(), expr.ident.c_str());
-      else
-        mo.locfile.error(expr.loc, "macro '%s' used as CollapseExpr", expr.ident.c_str());
-    } else if (auto d = dynamic_cast<DefineStmt*>(r)) {
+    if (! r)
+      error_undefined(expr.loc, expr.qualified, expr.ident);
+    else if (r == (Stmt*)1)
+      error_ambiguous(expr.loc, expr.ident);
+    else if (auto d = dynamic_cast<PreprocessDefineStmt*>(r))
+      error_misuse_macro("CollapseExpr", expr.loc, expr.qualified, expr.ident);
+    else if (auto d = dynamic_cast<DefineStmt*>(r)) {
       used_as_collapse[d].push_back(&expr);
       expr.define_stmt = d;
     } else
@@ -208,18 +213,13 @@ struct ModuleUse : PrePostActionExprStmtVisitor {
     this->stmt = NULL;
   }
   void visit(EmbedExpr& expr) override {
-    // almost the same to CollapseExpr except for the dependency
+    // introduce dependency
     Stmt* r = resolve(mo, expr.qualified, expr.ident);
-    if (! r) {
-      n_errors++;
-      if (expr.qualified.size())
-        mo.locfile.error(expr.loc, "'%s::%s' undefined", expr.qualified.c_str(), expr.ident.c_str());
-      else
-        mo.locfile.error(expr.loc, "'%s' undefined", expr.ident.c_str());
-    } else if (r == (Stmt*)1) {
-      n_errors++;
-      mo.locfile.error(expr.loc, "ambiguous '%s'", expr.ident.c_str());
-    } else if (auto d = dynamic_cast<PreprocessDefineStmt*>(r)) {
+    if (! r)
+      error_undefined(expr.loc, expr.qualified, expr.ident);
+    else if (r == (Stmt*)1)
+      error_ambiguous(expr.loc, expr.ident);
+    else if (auto d = dynamic_cast<PreprocessDefineStmt*>(r)) {
       // enlarge alphabet
       expr.define_stmt = NULL;
       expr.macro_value = d->value;
@@ -230,6 +230,25 @@ struct ModuleUse : PrePostActionExprStmtVisitor {
       expr.define_stmt = d;
     } else
       assert(0);
+  }
+private:
+  void error_undefined(const Location& loc, const string& qualified, const string& ident) {
+    n_errors++;
+    if (qualified.size())
+      mo.locfile.error(loc, "'%s::%s' undefined", qualified.c_str(), ident.c_str());
+    else
+      mo.locfile.error(loc, "'%s' undefined", ident.c_str());
+  }
+  void error_ambiguous(const Location& loc, const string& ident) {
+    n_errors++;
+    mo.locfile.error(loc, "ambiguous '%s'", ident.c_str());
+  }
+  void error_misuse_macro(const char* name, const Location& loc, const string& qualified, const string& ident) {
+    n_errors++;
+    if (qualified.size())
+      mo.locfile.error(loc, "macro '%s::%s' used as %s", qualified.c_str(), ident.c_str(), name);
+    else
+      mo.locfile.error(loc, "macro '%s' used as %s", ident.c_str(), name);
   }
 };
 
@@ -386,23 +405,44 @@ long load(const string& filename)
   if (n_errors)
     return n_errors;
 
-  // warning: used as both CollapseExpr and EmbedExpr
-  for (auto& it: used_as_collapse)
-    if (used_as_embed.count(it.first)) {
-      it.first->module->locfile.warning(it.first->loc, "'%s' used as both CollapseExpr and EmbedExpr", it.first->lhs.c_str());
-      auto& xs = it.second;
-      auto& ys = used_as_embed[it.first];
-      if (xs.size() <= ys.size() || xs.size() <= 3)
-        for (auto* x: xs) {
-          fputs("  ", stderr);
-          x->stmt->module->locfile.warning_context(x->loc, "required by %s", x->stmt->lhs.c_str());
-        }
-      if (xs.size() > ys.size() || ys.size() <= 3)
-        for (auto* y: ys) {
-          fputs("  ", stderr);
-          y->stmt->module->locfile.warning_context(y->loc, "required by %s", y->stmt->lhs.c_str());
-        }
+  // warning: not used solely as CallExpr, CollapseExpr or EmbedExpr
+  {
+    auto it0 = used_as_call.begin(), it0e = used_as_call.end(),
+         it1 = used_as_collapse.begin(), it1e = used_as_collapse.end(),
+         it2 = used_as_embed.begin(), it2e = used_as_embed.end();
+    while (it0 != it0e || it1 != it1e || it2 != it2e) {
+      long k = 0;
+      long c = 0;
+      DefineStmt* x = NULL;
+      if (it0 != it0e && (! x || it0->first < x)) x = it0->first;
+      if (it1 != it1e && (! x || it1->first < x)) x = it1->first;
+      if (it2 != it2e && (! x || it2->first < x)) x = it2->first;
+      if (it0 != it0e && it0->first == x) c++;
+      if (it1 != it1e && it1->first == x) c++;
+      if (it2 != it2e && it2->first == x) c++;
+      if (c > 1) {
+        x->module->locfile.warning(x->loc, "'%s' is not used solely as CallExpr, CollapseExpr or EmbedExpr", x->lhs.c_str());
+        if (it0 != it0e && it0->first == x)
+          for (auto* y: it0->second) {
+            fputs("  ", stderr);
+            y->stmt->module->locfile.warning_context(y->loc, "required by %s", y->stmt->lhs.c_str());
+          }
+        if (it1 != it1e && it1->first == x)
+          for (auto* y: it1->second) {
+            fputs("  ", stderr);
+            y->stmt->module->locfile.warning_context(y->loc, "required by %s", y->stmt->lhs.c_str());
+          }
+        if (it2 != it2e && it2->first == x)
+          for (auto* y: it2->second) {
+            fputs("  ", stderr);
+            y->stmt->module->locfile.warning_context(y->loc, "required by %s", y->stmt->lhs.c_str());
+          }
+      }
+      if (it0 != it0e && it0->first == x) ++it0, c++;
+      if (it1 != it1e && it1->first == x) ++it1, c++;
+      if (it2 != it2e && it2->first == x) ++it2, c++;
     }
+  }
 
   if (opt_dump_module) {
     magenta(); printf("=== Module\n"); sgr0();
@@ -437,7 +477,8 @@ long load(const string& filename)
 
   // AB has been updated by ModuleUse
   action_label_base = action_label = AB;
-  collapse_label_base = collapse_label = action_label+1000000;
+  call_label_base = call_label = action_label+1000000;
+  collapse_label_base = collapse_label = call_label+1000000;
 
   DP(1, "Compiling DefineStmt");
   for (auto stmt: topo)
@@ -449,6 +490,25 @@ long load(const string& filename)
     err_exit(EX_OSFILE, "fopen", opt_output_filename);
     return n_errors;
   }
+
+  unordered_map<DefineStmt*, vector<pair<long, long>>> stmt2call_addr;
+  DP(1, "Compiling exporting DefineStmt (coalescing referenced CallExpr/CollapseExpr)");
+  for (Stmt* x = main_module->toplevel; x; x = x->next)
+    if (auto xx = dynamic_cast<DefineStmt*>(x))
+      if (xx->export_ && ! compile_export(xx))
+        n_errors++;
+  if (n_errors)
+    return n_errors;
+
+  for (Stmt* x = main_module->toplevel; x; x = x->next)
+    if (auto xx = dynamic_cast<DefineStmt*>(x))
+      if (xx->export_) {
+        FsaAnno& anno = compiled[xx];
+        if (opt_dump_automaton)
+          print_automaton(anno.fsa);
+        if (opt_dump_assoc)
+          print_assoc(anno);
+      }
 
   if (opt_mode == Mode::cxx) {
     if (opt_output_header_filename) {
@@ -466,8 +526,7 @@ long load(const string& filename)
   } else if (opt_mode == Mode::graphviz) {
     DP(1, "Generating Graphviz dot");
     generate_graphviz(mo);
-  }
-  else if (opt_mode == Mode::interactive) {
+  } else if (opt_mode == Mode::interactive) {
     DP(1, "Testing given string");
     DefineStmt* main_export = NULL;
     for (Stmt* x = main_module->toplevel; x; x = x->next)
@@ -480,7 +539,6 @@ long load(const string& filename)
       puts("no exporting DefineStmt");
     else {
       printf("Testing %s\n", main_export->lhs.c_str());
-      compile_export(main_export);
       repl(main_export);
     }
   }

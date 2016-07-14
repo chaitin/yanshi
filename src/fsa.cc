@@ -44,10 +44,16 @@ bool Fsa::has(long u, long c) const
   return it != adj[u].begin() && c < (--it)->first.second;
 }
 
-bool Fsa::has_collapse(long u) const
+bool Fsa::has_call(long u) const
 {
-  auto it = lower_bound(ALL(adj[u]), make_pair(make_pair(collapse_label_base, LONG_MIN), LONG_MIN));
-  return it != adj[u].end() && it->first.first < collapse_label;
+  auto it = upper_bound(ALL(adj[u]), make_pair(make_pair(call_label_base, LONG_MAX), LONG_MAX));
+  return it != adj[u].end() && it->first.first < call_label || it != adj[u].begin() && call_label_base < (--it)->first.second;
+}
+
+bool Fsa::has_call_or_collapse(long u) const
+{
+  auto it = upper_bound(ALL(adj[u]), make_pair(make_pair(call_label_base, LONG_MAX), LONG_MAX));
+  return it != adj[u].end() || it != adj[u].begin() && call_label_base < (--it)->first.second;
 }
 
 long Fsa::transit(long u, long c) const
@@ -113,14 +119,20 @@ Fsa Fsa::operator~() const
   return r;
 }
 
-void Fsa::accessible(function<void(long)> relate)
+void Fsa::accessible(const vector<long>* starts, function<void(long)> relate)
 {
   vector<long> q{start}, id(n(), 0);
   id[start] = 1;
+  if (starts)
+    for (long u: *starts)
+      if (! id[u]) {
+        id[u] = 1;
+        q.push_back(u);
+      }
   REP(i, q.size()) {
     long u = q[i];
     for (auto& e: adj[u]) {
-      if (e.first.first >= AB) break;
+      //if (e.first.first >= AB) break;
       if (! id[e.second]) {
         id[e.second] = 1;
         q.push_back(e.second);
@@ -154,12 +166,12 @@ void Fsa::accessible(function<void(long)> relate)
   adj.resize(j);
 }
 
-void Fsa::co_accessible(function<void(long)> relate)
+void Fsa::co_accessible(const vector<bool>*final, function<void(long)> relate)
 {
   vector<vector<long>> radj(n());
   REP(i, n())
     for (auto& e: adj[i]) {
-      if (e.first.first >= AB) break;
+      //if (e.first.first >= AB) break;
       radj[e.second].push_back(i);
     }
   REP(i, n())
@@ -167,6 +179,12 @@ void Fsa::co_accessible(function<void(long)> relate)
   vector<long> q = finals, id(n(), 0);
   for (long f: finals)
     id[f] = 1;
+  if (final)
+    REP(i, n())
+      if ((*final)[i] && ! id[i]) {
+        id[i] = 1;
+        q.push_back(i);
+      }
   REP(i, q.size()) {
     long u = q[i];
     for (auto& v: radj[u])
@@ -294,7 +312,7 @@ Fsa Fsa::intersect(const Fsa& rhs, function<void(long, long)> relate) const
   return r;
 }
 
-Fsa Fsa::determinize(function<void(long, const vector<long>&)> relate) const
+Fsa Fsa::determinize(const vector<long>* starts, function<void(long, const vector<long>&)> relate) const
 {
   Fsa r;
   r.start = 0;
@@ -302,10 +320,19 @@ Fsa Fsa::determinize(function<void(long, const vector<long>&)> relate) const
   vector<vector<Edge>::const_iterator> its(n());
   vector<long> vs{start};
   vector<pair<long, long>> events;
+  stack<vector<long>> st;
   epsilon_closure(vs);
   m[vs] = 0;
-  stack<vector<long>> st;
   st.push(move(vs));
+  if (starts)
+    for (long u: *starts) {
+      vs.assign(1, u);
+      epsilon_closure(vs);
+      if (! m.count(vs)) {
+        m.emplace(vs, m.size());
+        st.push(move(vs));
+      }
+    }
   while (st.size()) {
     vector<long> x = move(st.top());
     st.pop();

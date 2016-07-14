@@ -34,6 +34,7 @@ void print_help(FILE *fh)
         "  -G,--graph <dir>          output a Graphviz dot file\n"
         "  -I,--import <dir>         add <dir> to search path for 'import'\n"
         "  -i,--interactive          interactive mode\n"
+        "  -k,--keep-inaccessible    do not perform accessible/co-accessible\n"
         "  -S,--standalone           generate header and 'main()'\n"
         "  --substring-grammar       construct regular approximation of the substring grammar. Inner states of nonterminals labeled 'intact' are not connected to start/final\n"
         "  -o,--output <file>        .cc output filename\n"
@@ -62,6 +63,7 @@ int main(int argc, char *argv[])
     {"graph",               no_argument,       0,   'G'},
     {"import",              required_argument, 0,   'I'},
     {"interactive",         no_argument,       0,   'i'},
+    {"keep-inaccessible",   no_argument,       0,   'k'},
     {"standalone",          no_argument,       0,   'S'},
     {"substring-grammar",   no_argument,       0,   's'},
     {"output",              required_argument, 0,   'o'},
@@ -70,7 +72,7 @@ int main(int argc, char *argv[])
     {0,                     0,                 0,   0},
   };
 
-  while ((opt = getopt_long(argc, argv, "bCDcd:GhI:il:O:o:Ss", long_options, NULL)) != -1) {
+  while ((opt = getopt_long(argc, argv, "bCDcd:GhI:ikl:O:o:Ss", long_options, NULL)) != -1) {
     switch (opt) {
     case 'b':
       opt_bytes = true;
@@ -96,11 +98,12 @@ int main(int argc, char *argv[])
     case 'I':
       opt_include_paths.push_back(string(optarg));
       break;
-#if HAVE_READLINE
     case 'i':
       opt_mode = Mode::interactive;
       break;
-#endif
+    case 'k':
+      opt_keep_inaccessible = true;
+      break;
     case 'l':
       if (debug_file)
         err_exit(EX_USAGE, "multiple '-l'");

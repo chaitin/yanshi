@@ -163,6 +163,8 @@ factor:
   | IDENT COLONCOLON IDENT { $$ = new EmbedExpr(*$1, *$3); delete $1; delete $3; $$->loc = yyloc; }
   | '!' IDENT { string t; $$ = new CollapseExpr(t, *$2); delete $2; $$->loc = yyloc; }
   | '!' IDENT COLONCOLON IDENT { $$ = new CollapseExpr(*$2, *$4); delete $2; delete $4; $$->loc = yyloc; }
+  | '&' IDENT { string t; $$ = new CallExpr(t, *$2); delete $2; $$->loc = yyloc; }
+  | '&' IDENT COLONCOLON IDENT { $$ = new CallExpr(*$2, *$4); delete $2; delete $4; $$->loc = yyloc; }
   | STRING_LITERAL { $$ = new LiteralExpr(*$1); delete $1; $$->loc = yyloc; }
   | '.' { $$ = new DotExpr(); $$->loc = yyloc; }
   | INTEGER {
