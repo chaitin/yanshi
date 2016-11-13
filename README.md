@@ -1,30 +1,156 @@
-# 偃师
+# 偃师 (yanshi)
 
-周穆王西巡狩，越昆仑，不至弇山。反还，未及中国，道有献工人名偃师。穆王荐之，问曰：“若有何能？”偃师曰：“臣唯命所试。然臣已有所造，愿王先观之。”穆王曰：“日以俱来，吾与若俱观之。”翌日偃师谒见王。王荐之，曰：“若与偕来者何人邪？”对曰：“臣之所造能倡者。”穆王惊视之，趋步俯仰，信人也。巧夫！领其颅，则歌合律；捧其手，则舞应节。千变万化，惟意所适。王以为实人也，与盛姬内御并观之。技将终，倡者瞬其目而招王之左右侍妾。王大怒，立欲诛偃师。偃师大慑，立剖散倡者以示王，皆傅会革、木、胶、漆、白、黑、丹、青之所为。王谛料之，内则肝胆、心肺、脾肾、肠胃，外则筋骨、支节、皮毛、齿发，皆假物也，而无不毕具者。合会复如初见。王试废其心，则口不能言；废其肝，则目不能视；废其肾，则足不能步。穆王始悦而叹曰：“人之巧乃可与造化者同功乎？”诏贰车载之以归。
-夫班输之云梯，墨翟之飞鸢，自谓能之极也。弟子东门贾、禽滑釐闻偃师之巧以告二子，二子终身不敢语艺，而时执规矩。
+yanshi is a finite state automaton generator like Ragel. Use inline operators to embed C++ code in the recognition of a language. yanshi is enhanced with features to approximate context-free grammar:
 
-偃师是《列子·汤问》中记载的一位工匠，善于制造能歌善舞的人偶。
+- Approximation of substring grammar
+- Approximation of recursive automaton to match expressions with recursion.
 
-## 构建
+The motivation to create yanshi is that Ragel does not provide a mechanism to serialize its representation of finite state automata, making it difficult to post-process generated automata and obtain the substring grammar recognizer.
 
-- debug版本：`make`
-- release版本：`make build=release`
+Later on, I found a simplified SQL grammar might contain more than 10000 states. It was not only slow to generate the automaton, making it hard to do trial-and-error experiments, but wasted memory to store the automaton. I introduced `CollapseExpr` to allow circular references.
 
-## 运行
+`CallExpr` takes one step further, maintains a return address stack to imitate function calls. It can be seen as an augmented `CollapseExpr`, removing a lot of false positive cases.
 
-在某个`$PATH`目录中添加`build/yanshi`的symbolic link。
+## Name
 
-`yanshi a.ys -o a.cc`
+From <https://en.wikipedia.org/wiki/Automaton>:
 
-## 语法
+<blockquote>
+In ancient China, a curious account of automata is found in the Lie Zi text (列子), written in the 3rd century BC. Within it there is a description of a much earlier encounter between King Mu of Zhou (周穆王, 1023-957 BC) and a mechanical engineer known as Yan Shi (偃师), an 'artificer'.
+</blockquote>
 
-### 支持`:`，兼容ANTLR很多语法
+## Build
 
-## contrib
+* Debug: `make`
+* Release: `make build=release`
+
+## Getting Started
+
+* Create file `a.ys`:
+  ```
+  export foo = 'hello'
+  ```
+
+  Run `yanshi -S a.ys -o /tmp/a.cc` to generate a C++ file from the yanshi source file `a.ys`.
+
+  + `yanshi_foo_start`: the start state is 0. States are represented by natural numbers.
+  + `yanshi_foo_is_final`: leave aside `ret_stack` and look at the last line, it checks whether `u` is one of the final states.
+  + `yanshi_foo_transit`: leave aside `ret_stack`, `u` is the current state and `c` is the next input codepoint or label.
+
+  With the `-S` option, yanshi will generate a standalone C++ file.
+  ```
+  % make -C /tmp a
+  make: Entering directory '/tmp'
+  g++     a.cc   -o a
+  make: Leaving directory '/tmp'
+  % /tmp/a hello
+  0 h 1 e 2 l 3 l 4 o 5
+  len: 5
+  pref: 5
+  state: 5
+  final: true
+  % /tmp/a
+  hello<press C-d>0 h 1 e 2 l 3 l 4 o 5
+  len: 5
+  pref: 5
+  state: 5
+  final: true
+  ```
+
+  States are yellow and interleaved with transition labels. Final states are bold yellow.
+  + `len`: the length of input codepoints or labels
+  + `pref`: the length of the longest prefix that does not enter the dead state
+  + `state`: the state entered after consuming the input
+  + `final`: whether the state is one of final states
+
+* Interactive mode
+
+  The `-i` option enables interactive mode.
+  ```
+  % yanshi -i a.ys
+  Testing foo
+  foo :: DefineStmt
+  .integer mode
+  Commands available from the prompt:
+    .automaton    dump automaton
+    .assoc        dump associated AST Expr for each state
+    .help         display this help
+    .integer      input is a list of non-negative integers, macros(#define) or ''  quoted strings
+    .macro        display defined macros
+    .string       input is a string
+    .stmt <ident> change target DefineStmt to <ident>
+    .quit         exit interactive mode
+  λ 104 101 108 108 111
+  0 104 1 101 2 108 3 108 4 111 5
+  export foo = 'hello':
+  λ .string
+  .string mode
+  λ hello
+  0 h 1 e 2 l 3 l 4 o 5
+  export foo = 'hello':
+  λ
+  ```
+
+* Regex-like syntax
+  ```
+  export hello = [gh] 'e' l{2} 'o'
+  l = 'l'
+  ```
+
+  `[gh]` is a bracket expression and `l{2}` denotes to matches `l` at least twice. This grammar matches `hello`, `gello`, `helllo`, ...
+
+* Actions (embedded C++ code)
+  ```
+  c++ {
+  #include <stdio.h>
+  }
+  export hello = '喵' @ { puts("meow"); } {2}
+  ```
+  I have not thought clearly on the implementation. The executing point may be counter-intuitive.
+
+* Modules
+  ```
+  # a.ys
+  import 'b.ys' as B # B::bar
+  import 'b.ys' # qux
+
+  export foo = B::bar | qux
+  bar = '4'
+
+  # b.ys
+  bar = '3'
+  qux = '5'
+  ```
+
+* Substring grammar
+  Specify the `--substring-grammar` option to generate code for substring grammar. That is, the generated code matches every substring of the grammar. The implementation creates a new start state and a new final state, connects the start state to the old start state, and old final states to the new final state.
+
+* `EmbedExpr`, reference a nonterminal without modifiers
+   ```
+   foo = bar
+   bar = [0-9]
+   ```
+   The complete automaton of bar will be duplicated in each reference site. If the referenced automaton is large, `EmbedExpr` will significantly increase the number of states. `EmbedExpr` defines dependencies among states and no cyclic dependency is allowed.
+
+* `CollapseExpr`, reference a nonterminal with the `!` modifier
+  ```
+  export foo = 'pre' !bar 'post'
+  bar = [\u0300-\u034E]
+  quz = 'meow' !bar 'meow'
+  ```
+  The final state of `'pre'` and the start state of `'post'` will be connected by a special directed arc. When exporting, an epsilon transition will be added from the tail of the arc to the start state of `bar`, others will be added from the final states of `bar` to the head of the arc. `CollapseExpr` behaves like function calls, however, the return address is not preserved (hence the name `CollapseExpr`) and the state may go to other call sites. In this example, the state may go to either `foo` or `quz` after traveling through `bar`, causing false positives.
+
+* `CallExpr`, reference a nonterminal with the `&` modifier
+  ```
+  export foo = 'pre' &bar 'post'
+  bar = '4'
+  ```
+
+## Contrib
 
 ### Vim
 
-语法高亮、Synaptics编辑时检查错误
+Syntax highlighting, and a syntax checking plugin for Synaptics
 
 ```zsh
 ln -sr contrib/vim/compiler/yanshi.vim ~/.vim/compiler/
@@ -36,7 +162,7 @@ ln -sr contrib/vim/syntax_checker/yanshi ~/.vim/syntax_checker/
 
 ### Zsh
 
-命令行补全
+Command line completion
 
 ```
 # ~/.zshrc
@@ -45,7 +171,7 @@ fpath=(~/.zsh $fpath)
 # ln -sr contrib/zsh/_yanshi ~/.zsh/
 ```
 
-## 源文件
+## Internals
 
 ```
 src
@@ -61,4 +187,24 @@ src
   location.cc
 ```
 
-## 原理
+* Lex `lexer.l`
+* Parse and generate a syntax tree `parser.y`
+* `loader.cc`
+  + Get a list of definitions
+  + Recursively load for each `import`
+  + Resolve references and associate uses to definitions
+  + Build a dependency graph from `EmbedExpr`
+  + Compile automaton for each nonterminal in topological order. `CollapseExpr` and `CallExpr` are represented by special directed arcs.
+  + Generate code for `export` nonterminals, resolving `CollapseExpr` and `CallExpr`
+
+### Finite state automaton
+
+Each node of the syntax tree corresponds to an automaton. The parent builds an automaton from its children according to the semantics. The automaton of the parent may contain states from the automaton of one of the children, or it is a state introduced by the parent.
+
+`assoc[i]` records the associative nodes in the automaton tree (which part of the syntax tree has associations with this state) and positions (start state, final state or inner state) for state `i`. It serves three purposes:
+
+* Check which action should be triggered
+* Look for inner states (neither start nor final) in the implementation of substring grammar
+* Check whether it is associated to a `CallExpr` or `CollapseExpr`
+
+### `CollapseExpr`
