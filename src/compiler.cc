@@ -683,8 +683,9 @@ static void generate_final(const char* name, const vector<bool>& final)
   for (long j = 0, i = 0; i < final.size(); i += CHAR_BIT*sizeof(long)) {
       ulong mask = 0;
       for (; j < final.size() && j < i+CHAR_BIT*sizeof(long); j++)
-        if (final[j])
-          mask |= 1uL << j-i;
+        if (final[j]) {
+          mask |= 1uL << (j-i);
+        }
       if (i) fprintf(output, ",");
       fprintf(output, "%#lx", mask);
   }

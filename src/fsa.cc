@@ -47,13 +47,13 @@ bool Fsa::has(long u, long c) const
 bool Fsa::has_call(long u) const
 {
   auto it = upper_bound(ALL(adj[u]), make_pair(make_pair(call_label_base, LONG_MAX), LONG_MAX));
-  return it != adj[u].end() && it->first.first < call_label || it != adj[u].begin() && call_label_base < (--it)->first.second;
+  return (it != adj[u].end() && it->first.first < call_label) || (it != adj[u].begin() && call_label_base < (--it)->first.second);
 }
 
 bool Fsa::has_call_or_collapse(long u) const
 {
   auto it = upper_bound(ALL(adj[u]), make_pair(make_pair(call_label_base, LONG_MAX), LONG_MAX));
-  return it != adj[u].end() || it != adj[u].begin() && call_label_base < (--it)->first.second;
+  return it != adj[u].end() || (it != adj[u].begin() && call_label_base < (--it)->first.second);
 }
 
 long Fsa::transit(long u, long c) const
