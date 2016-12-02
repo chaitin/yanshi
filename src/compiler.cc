@@ -281,10 +281,13 @@ fprintf(output,
 "  case %ld:\n"
 "    u = %ld;\n"
 , u, call_addr[u].first);
-      fprintf(output, opt_gen_c ?
-"    if (*ret_stack_len >= 10000) return -1;\n"
+      if (opt_gen_c)
+        fprintf(output,
+"    if (*ret_stack_len >= %ld) return -1;\n"
 "    ret_stack[(*ret_stack_len)++] = %ld;\n"
-:
+, opt_max_return_stack, call_addr[u].second);
+      else
+        fprintf(output,
 "    ret_stack.push_back(%ld);\n"
 , call_addr[u].second);
       fprintf(output,
@@ -784,11 +787,11 @@ void generate_cxx(Module* mo)
 "  const char* p;\n"
 "  long c, u = yanshi_%s_start, pref = 0;\n"
 , main_export->lhs.c_str());
-    fprintf(output, opt_gen_c ?
-"  long ret_stack[10000], ret_stack_len = 0;\n"
-:
-"  vector<long> ret_stack;\n");
-  fprintf(output,
+    if (opt_gen_c)
+      fprintf(output, "  long ret_stack[%ld], ret_stack_len = 0;\n", opt_max_return_stack);
+    else
+      fprintf(output, "  vector<long> ret_stack;\n");
+    fprintf(output,
 "  if (argc == 2)\n"
 "    utf8 = argv[1];\n"
 "  else {\n"
@@ -799,32 +802,32 @@ void generate_cxx(Module* mo)
 "  }\n"
 "  u32string utf32 = wstring_convert<codecvt_utf8<char32_t>, char32_t>{}.from_bytes(utf8);\n"
 );
-  fprintf(output, opt_gen_c ?
+    fprintf(output, opt_gen_c ?
 "  printf(\"\\033[%%s33m%%ld \\033[m\", yanshi_%s_is_final(ret_stack, ret_stack_len, u) ? \"1;\" : \"\", u);\n"
 :
 "  printf(\"\\033[%%s33m%%ld \\033[m\", yanshi_%s_is_final(ret_stack, u) ? \"1;\" : \"\", u);\n"
 , main_export->lhs.c_str()
 );
-  fprintf(output,
+    fprintf(output,
 "  for (char32_t c: utf32) {\n");
-  fprintf(output, opt_gen_c ?
+    fprintf(output, opt_gen_c ?
 "    u = yanshi_%s_transit(ret_stack, &ret_stack_len, u, c);\n"
 :
 "    u = yanshi_%s_transit(ret_stack, u, c);\n"
 , main_export->lhs.c_str());
-  fprintf(output,
+    fprintf(output,
 "    if (iswcntrl(c)) printf(\"%%d \", c);\n"
 "    else printf(\"%%lc \", c);\n");
-  fprintf(output, opt_gen_c ?
+    fprintf(output, opt_gen_c ?
 "    printf(\"\\033[%%s33m%%ld \\033[m\", yanshi_%s_is_final(ret_stack, ret_stack_len, u) ? \"1;\" : \"\", u);\n"
 :
 "    printf(\"\\033[%%s33m%%ld \\033[m\", yanshi_%s_is_final(ret_stack, u) ? \"1;\" : \"\", u);\n"
 , main_export->lhs.c_str());
-  fprintf(output,
+    fprintf(output,
 "    if (u < 0) break;\n"
 "    pref++;\n"
 "  }\n");
-  fprintf(output, opt_gen_c ?
+    fprintf(output, opt_gen_c ?
 "  printf(\"\\nlen: %%zd\\npref: %%ld\\nstate: %%ld\\nfinal: %%s\\n\", utf32.size(), pref, u, yanshi_%s_is_final(ret_stack, ret_stack_len, u) ? \"true\" : \"false\");\n"
 "}\n"
 :

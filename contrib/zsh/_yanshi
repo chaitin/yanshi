@@ -15,9 +15,10 @@ _arguments \
   '(-I --import)'{-I,--import}'=[add <dir> to search path for "import"]' \
   '(-i --interactive)'{-i,--interactive}'[interactive mode]' \
   '(-k --keep-inaccessible)'{-k,--keep-inaccessible}'[do not perform accessible/co-accessible]' \
-  '(-l --debug-output)'{-l,--debug-output}'[filename for debug output]:file:_files' \
+  '(-l --debug-output)'{-l,--debug-output}'=[filename for debug output]:file:_files' \
+  '--max-return-stack=[max length of return stack in C generator]:len:' \
   '(-o --output)'{-o,--output}'=[.cc output filename]:file:_files' \
-  '(-O --output-header)'{-O,--output-header}'[.hh output filename]:file:_files' \
+  '(-O --output-header)'{-O,--output-header}'=[.hh output filename]:file:_files' \
   '(-s --substring-grammar)'{-s,--substring-grammar}'[construct regular approximation of the substring grammar. Inner states of nonterminals labeled 'intact' are not connected to start/final]' \
   '(-h --help)'{-h,--help}'[display this help]' \
   '1:file:_files -g "*.{ys,yanshi}"'\

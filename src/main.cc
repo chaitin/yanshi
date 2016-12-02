@@ -34,6 +34,7 @@ void print_help(FILE *fh)
         "  -G,--graph <dir>          output a Graphviz dot file\n"
         "  -I,--import <dir>         add <dir> to search path for 'import'\n"
         "  -i,--interactive          interactive mode\n"
+        "  --max-return-stack        max length of return stack in C generator (default: 100)\n"
         "  -k,--keep-inaccessible    do not perform accessible/co-accessible\n"
         "  -S,--standalone           generate header and 'main()'\n"
         "  --substring-grammar       construct regular approximation of the substring grammar. Inner states of nonterminals labeled 'intact' are not connected to start/final\n"
@@ -63,6 +64,7 @@ int main(int argc, char *argv[])
     {"graph",               no_argument,       0,   'G'},
     {"import",              required_argument, 0,   'I'},
     {"interactive",         no_argument,       0,   'i'},
+    {"max-return-stack",    required_argument, 0,   1006},
     {"keep-inaccessible",   no_argument,       0,   'k'},
     {"standalone",          no_argument,       0,   'S'},
     {"substring-grammar",   no_argument,       0,   's'},
@@ -129,6 +131,9 @@ int main(int argc, char *argv[])
     case 1003: opt_dump_embed = true; break;
     case 1004: opt_dump_module = true; break;
     case 1005: opt_dump_tree = true; break;
+    case 1006:
+      opt_max_return_stack = get_long(optarg);
+      break;
     case '?':
       print_help(stderr);
       break;

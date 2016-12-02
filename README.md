@@ -145,6 +145,7 @@ In ancient China, a curious account of automata is found in the Lie Zi text (列
   export foo = 'pre' &bar 'post'
   bar = '4'
   ```
+  This is a refinement of `CollapseExpr`. Suppose state `&B` is contained in `A`'s definition (`A` calls `B`). `&B` will be represented as an pseudo arc (`u -> v`), where `u` is the state before `&B` and `v` is the state after `&B`. If arcs of `u` do not collide with arcs of `B`, the transition function will push `v` to the return stack if current state set contains `u` and there is no other transition. Note `B` is disconnected from `A`, which is different from the `CollapseExpr` case. The machine will transit on automaton `B` greedily. If there is no transition, it will pop a return address(`v` in this case) and jumps to it.
 
 ## Contrib
 
