@@ -1,14 +1,14 @@
+CPPFLAGS := -g3 -std=c++1y -Isrc -I. -DHAVE_READLINE
+
 ifeq ($(build),release)
   BUILD := release
-  CFLAGS += -g3 -Os -std=c++1y
+  CPPFLAGS += -Os
 else
   BUILD := build
-  CFLAGS += -g3 -std=c++1y -fsanitize=undefined,address -DDEBUG
+  CPPFLAGS += -fsanitize=undefined,address -DDEBUG
   LDLIBS := -lasan -lubsan
 endif
 
-CPPFLAGS := -Isrc -I. -DHAVE_READLINE
-CXXFLAGS := $(CFLAGS)
 LDLIBS += -licuuc -lreadline
 SRC := $(filter-out src/lexer.cc src/parser.cc, $(wildcard src/*.cc)) src/lexer.cc src/parser.cc
 OBJ := $(addprefix $(BUILD)/,$(subst src/,,$(SRC:.cc=.o)))
@@ -22,6 +22,9 @@ unittest: $(addprefix $(BUILD)/unittest/,$(UNITTEST_EXE))
 
 sinclude $(OBJ:.o=.d)
 
+# FIXME
+$(BUILD)/repl.o: src/lexer.hh
+
 $(BUILD) $(BUILD)/unittest:
 	mkdir -p $@
 
@@ -29,11 +32,11 @@ $(BUILD)/yanshi: $(OBJ)
 	$(LINK.cc) $^ $(LDLIBS) -o $@
 
 $(BUILD)/%.o: src/%.cc | $(BUILD)
-	g++ $(CPPFLAGS) -MM -MP -MT $@ -MF $(@:.o=.d) $<
+	$(CXX) $(CPPFLAGS) -MM -MP -MT $@ -MF $(@:.o=.d) $<
 	$(COMPILE.cc) $< -o $@
 
 $(BUILD)/unittest/%: unittest/%.cc $(wildcard unittest/*.hh) $(filter-out $(BUILD)/main.o,$(OBJ)) | $(BUILD)/unittest
-	g++ $(CPPFLAGS) -MM -MP -MT $@ -MF $(@:.o=.d) $<
+	$(CXX) $(CPPFLAGS) -MM -MP -MT $@ -MF $(@:.o=.d) $<
 	$(LINK.cc) $(filter-out %.hh,$^) $(LDLIBS) -o $@
 
 src/lexer.cc src/lexer.hh: src/lexer.l
