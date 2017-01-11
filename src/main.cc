@@ -31,6 +31,7 @@ void print_help(FILE *fh)
         "  --dump-embed              dump statistics of EmbedExpr\n"
         "  --dump-module             dump module use/def/...\n"
         "  --dump-tree               dump AST\n"
+        "  --extern-c                generate extern \"C\" specifier\n"
         "  -G,--graph <dir>          output a Graphviz dot file\n"
         "  -I,--import <dir>         add <dir> to search path for 'import'\n"
         "  -i,--interactive          interactive mode\n"
@@ -61,6 +62,7 @@ int main(int argc, char *argv[])
     {"dump-embed",          no_argument,       0,   1003},
     {"dump-module",         no_argument,       0,   1004},
     {"dump-tree",           no_argument,       0,   1005},
+    {"extern-c",            no_argument,       0,   1007},
     {"graph",               no_argument,       0,   'G'},
     {"import",              required_argument, 0,   'I'},
     {"interactive",         no_argument,       0,   'i'},
@@ -134,6 +136,7 @@ int main(int argc, char *argv[])
     case 1006:
       opt_max_return_stack = get_long(optarg);
       break;
+    case 1007: opt_gen_extern_c = true; break;
     case '?':
       print_help(stderr);
       break;

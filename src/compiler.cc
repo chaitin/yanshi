@@ -255,16 +255,22 @@ void generate_transitions(DefineStmt* stmt)
              }
 
   if (output_header) {
-    if (opt_gen_c)
-      fprintf(output_header, "extern \"C\" long yanshi_%s_transit(long* ret_stack, long* ret_stack_len, long u, long c", stmt->lhs.c_str());
+    if (opt_gen_c) {
+      if (opt_gen_extern_c)
+        fputs("extern \"C\" ", output_header);
+      fprintf(output_header, "long yanshi_%s_transit(long* ret_stack, long* ret_stack_len, long u, long c", stmt->lhs.c_str());
+    }
     else
       fprintf(output_header, "long yanshi_%s_transit(vector<long>& ret_stack, long u, long c", stmt->lhs.c_str());
     if (stmt->export_params.size())
       fprintf(output_header, ", %s", stmt->export_params.c_str());
     fprintf(output_header, ");\n");
   }
-  if (opt_gen_c)
-    fprintf(output, "extern \"C\" long yanshi_%s_transit(long* ret_stack, long* ret_stack_len, long u, long c", stmt->lhs.c_str());
+  if (opt_gen_c) {
+    if (opt_gen_extern_c)
+      fputs("extern \"C\" ", output);
+    fprintf(output, "long yanshi_%s_transit(long* ret_stack, long* ret_stack_len, long u, long c", stmt->lhs.c_str());
+  }
   else
     fprintf(output, "long yanshi_%s_transit(vector<long>& ret_stack, long u, long c", stmt->lhs.c_str());
   if (stmt->export_params.size())
@@ -705,14 +711,17 @@ static void generate_cxx_export(DefineStmt* stmt)
   fprintf(output, "long yanshi_%s_start = %ld;\n\n", stmt->lhs.c_str(), anno.fsa.start);
 
   // yanshi_%s_is_final
-  if (output_header)
+  if (output_header) {
+    if (opt_gen_extern_c) fputs("extern \"C\" ", output_header);
     fprintf(output_header, opt_gen_c ?
-"extern \"C\" bool yanshi_%s_is_final(const long* ret_stack, long ret_stack_len, long u);\n"
+"bool yanshi_%s_is_final(const long* ret_stack, long ret_stack_len, long u);\n"
 :
 "bool yanshi_%s_is_final(const vector<long>& ret_stack, long u);\n"
 , stmt->lhs.c_str());
+  }
+  if (opt_gen_extern_c) fputs("extern \"C\" ", output);
   fprintf(output, opt_gen_c ?
-"extern \"C\" bool yanshi_%s_is_final(const long* ret_stack, long ret_stack_len, long u)\n"
+"bool yanshi_%s_is_final(const long* ret_stack, long ret_stack_len, long u)\n"
 :
 "bool yanshi_%s_is_final(const vector<long>& ret_stack, long u)\n"
           , stmt->lhs.c_str());
