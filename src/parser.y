@@ -51,7 +51,7 @@ int parse(const LocationFile& locfile, Stmt*& res);
 %destructor { delete $$; } <intervals>
 %destructor { delete $$; } <stmt>
 
-%token ACTION AS COLONCOLON CPP DOTDOT EPSILON EXPORT IMPORT INTACT INVALID_CHARACTER PREPROCESS_DEFINE
+%token ACTION AMPERAMPER AS COLONCOLON CPP DOTDOT EPSILON EXPORT IMPORT INTACT INVALID_CHARACTER PREPROCESS_DEFINE
 %token <integer> CHAR INTEGER
 %token <str> IDENT
 %token <str> BRACED_CODE
@@ -143,7 +143,7 @@ union_expr2:
 
 intersect_expr:
     difference_expr { $$ = $1; }
-  | intersect_expr '&' difference_expr { $$ = new IntersectExpr($1, $3); $$->loc = yyloc; }
+  | intersect_expr AMPERAMPER difference_expr { $$ = new IntersectExpr($1, $3); $$->loc = yyloc; }
 
 difference_expr:
     concat_expr { $$ = $1; }

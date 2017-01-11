@@ -99,6 +99,12 @@ In ancient China, a curious account of automata is found in the Lie Zi text (列
 
   `[gh]` is a bracket expression and `l{2}` denotes to matches `l` at least twice. This grammar matches `hello`, `gello`, `helllo`, ...
 
+  + Union: `c = a | b`
+  + Intersection: `c = a && b`
+  + Difference: `c = a - b`
+  + Concatenation: `c = a b`
+  + Complement: `c = ~ a`
+
 * Actions (embedded C++ code)
   ```
   c++ {

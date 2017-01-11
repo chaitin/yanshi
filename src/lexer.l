@@ -103,6 +103,7 @@ L			[a-zA-Z_\x80-\xff]
 
 "::" return COLONCOLON;
 ".." return DOTDOT;
+"&&" return AMPERAMPER;
 ";" if (semicolon) return '\n';
 [-~!&*=+,.?|{}:] return yytext[0];
 "action" yy_push_state(EXPECT_CODE, yyscanner); return ACTION;
