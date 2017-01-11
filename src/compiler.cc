@@ -753,6 +753,8 @@ void generate_cxx(Module* mo)
   if (! opt_gen_c) {
     fprintf(output, "#include <vector>\n");
     fprintf(output, "using namespace std;\n");
+  } else {
+    fprintf(output, "#include <stdbool.h>\n");
   }
   if (opt_standalone) {
     fputs(
@@ -773,6 +775,8 @@ void generate_cxx(Module* mo)
     if (! opt_gen_c) {
       fprintf(output_header, "#include <vector>\n");
       fprintf(output_header, "using std::vector;\n");
+    } else {
+      fprintf(output_header, "#include <stdbool.h>\n");
     }
   }
   fprintf(output, "\n");
