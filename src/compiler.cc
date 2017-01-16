@@ -766,6 +766,7 @@ void generate_cxx(Module* mo)
 "#include <cstdio>\n"
 "#include <cstring>\n"
 "#include <cwctype>\n"
+"#include <iostream>\n"
 "#include <locale>\n"
 "#include <string>\n"
 "using namespace std;\n"
@@ -830,8 +831,8 @@ void generate_cxx(Module* mo)
 "    u = yanshi_%s_transit(ret_stack, u, c);\n"
 , main_export->lhs.c_str());
     fprintf(output,
-"    if (iswcntrl(c)) printf(\"%%d \", c);\n"
-"    else printf(\"%%lc \", c);\n");
+"    if (c > WCHAR_MAX || iswcntrl(c)) printf(\"%%\" PRIuLEAST32 \" \", c);\n"
+"    else cout << wstring_convert<codecvt_utf8<char32_t>, char32_t>{}.to_bytes(c) << ' ';\n");
     fprintf(output, opt_gen_c ?
 "    printf(\"\\033[%%s33m%%ld \\033[m\", yanshi_%s_is_final(ret_stack, ret_stack_len, u) ? \"1;\" : \"\", u);\n"
 :
