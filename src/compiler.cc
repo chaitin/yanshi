@@ -759,14 +759,15 @@ void generate_cxx(Module* mo)
   if (opt_standalone) {
     fputs(
 "#include <algorithm>\n"
+"#include <cinttypes>\n"
+"#include <clocale>\n"
 "#include <codecvt>\n"
+"#include <cstdint>\n"
+"#include <cstdio>\n"
+"#include <cstring>\n"
+"#include <cwctype>\n"
 "#include <locale>\n"
-"#include <locale.h>\n"
-"#include <stdint.h>\n"
-"#include <stdio.h>\n"
-"#include <string.h>\n"
 "#include <string>\n"
-"#include <wctype.h>\n"
 "using namespace std;\n"
 , output);
   }
